@@ -35,14 +35,14 @@ export default function Sidebar() {
         </a>
 
         <div className="w-full flex flex-col gap-2.5 mb-8">
-          <button className="w-full bg-[#1a8bc4] hover:bg-[#1572a1] transition-colors text-white py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px] shadow-sm">
+          <a href="tel:+353749155301" className="w-full bg-[#1a8bc4] hover:bg-[#1572a1] transition-colors text-white py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px] shadow-sm">
             <Phone className="w-4 h-4" />
             Call Us
-          </button>
-          <button className="w-full bg-[#1a8bc4] hover:bg-[#1572a1] transition-colors text-white py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px] shadow-sm">
+          </a>
+          <a href="mailto:golf@rosapenna.ie" className="w-full bg-[#1a8bc4] hover:bg-[#1572a1] transition-colors text-white py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px] shadow-sm">
             <Mail className="w-4 h-4" />
             Email Us
-          </button>
+          </a>
         </div>
 
         <p className="text-[11px] text-gray-500 leading-[1.8] text-justify mb-8">

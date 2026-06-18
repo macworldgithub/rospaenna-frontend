@@ -1,5 +1,4 @@
 "use client";
-
 import { Phone, Mail, MapPin } from "lucide-react";
 import { useEffect, useState } from "react";
 

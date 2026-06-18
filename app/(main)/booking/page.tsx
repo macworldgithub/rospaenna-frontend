@@ -329,7 +329,10 @@ function BookingForm() {
         </div>
 
         <div className="flex justify-between items-center mt-6 mb-12">
-          <button className="px-12 py-3 border border-[#d9534f] text-[#d9534f] hover:bg-[#d9534f] hover:text-white transition-colors font-bold text-xs tracking-widest uppercase rounded-[3px]">
+          <button
+            onClick={() => router.push('/tee-times')}
+            className="px-12 py-3 border border-[#d9534f] text-[#d9534f] hover:bg-[#d9534f] hover:text-white transition-colors font-bold text-xs tracking-widest uppercase rounded-[3px]"
+          >
             Cancel
           </button>
           <button className="px-24 py-3 bg-[#699e33] hover:bg-[#5b8a2c] transition-colors text-white font-bold text-xs tracking-widest uppercase rounded-[3px]">

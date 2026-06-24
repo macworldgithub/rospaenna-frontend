@@ -160,7 +160,7 @@ function BookingForm() {
               <p className="text-[11px] font-bold text-gray-700">
                 I agree to receive information, newsletters, promotions and offers from Rosapenna Golf Resort.
               </p>
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" className="w-4 h-4 border-gray-300 rounded text-[#1a8bc4] focus:ring-[#1a8bc4]" />
                   <span className="text-[11px] text-gray-700 font-bold">Email</span>
@@ -274,29 +274,29 @@ function BookingForm() {
         <h2 className="text-[#3a4550] font-bold tracking-wide uppercase">Booking Details</h2>
 
         <div className="flex flex-col text-[13px]">
-          <div className="flex">
-            <div className="w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Booking Type</div>
+          <div className="flex flex-col sm:flex-row">
+            <div className="w-full sm:w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Booking Type</div>
             <div className="flex-1 p-3 text-gray-600 border-b border-gray-50">Golf Package</div>
           </div>
-          <div className="flex">
-            <div className="w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Total Booking Fee</div>
+          <div className="flex flex-col sm:flex-row">
+            <div className="w-full sm:w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Total Booking Fee</div>
             <div className="flex-1 p-3 text-gray-600 border-b border-gray-50">{price}</div>
           </div>
-          <div className="flex">
-            <div className="w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Booking Date/Time</div>
+          <div className="flex flex-col sm:flex-row">
+            <div className="w-full sm:w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Booking Date/Time</div>
             <div className="flex-1 p-3 text-gray-600 border-b border-gray-50">07:30 Tuesday 16th June 2026</div>
           </div>
-          <div className="flex">
-            <div className="w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Course</div>
+          <div className="flex flex-col sm:flex-row">
+            <div className="w-full sm:w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Course</div>
             <div className="flex-1 p-3 text-gray-600 border-b border-gray-50">Old Tom Morris Links</div>
           </div>
-          <div className="flex">
-            <div className="w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Holes</div>
+          <div className="flex flex-col sm:flex-row">
+            <div className="w-full sm:w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Holes</div>
             <div className="flex-1 p-3 text-gray-600 border-b border-gray-50">18</div>
           </div>
-          <div className="flex">
-            <div className="w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700">Number of Players</div>
-            <div className="flex-1 p-3 text-gray-600">{players}</div>
+          <div className="flex flex-col sm:flex-row">
+            <div className="w-full sm:w-[200px] bg-[#f9f9f9] p-3 font-semibold text-gray-700 border-b border-white">Number of Players</div>
+            <div className="flex-1 p-3 text-gray-600 border-b border-gray-50">{players}</div>
           </div>
         </div>
       </div>
@@ -328,14 +328,14 @@ function BookingForm() {
           </div>
         </div>
 
-        <div className="flex justify-between items-center mt-6 mb-12">
+        <div className="flex flex-col-reverse sm:flex-row justify-start items-center gap-4 mt-6 mb-12">
           <button
             onClick={() => router.push('/tee-times')}
-            className="px-12 py-3 border border-[#d9534f] text-[#d9534f] hover:bg-[#d9534f] hover:text-white transition-colors font-bold text-xs tracking-widest uppercase rounded-[3px]"
+            className="w-full sm:w-auto px-8 sm:px-12 py-3 border border-[#d9534f] text-[#d9534f] hover:bg-[#d9534f] hover:text-white transition-colors font-bold text-xs tracking-widest uppercase rounded-[3px]"
           >
             Cancel
           </button>
-          <button className="px-24 py-3 bg-[#699e33] hover:bg-[#5b8a2c] transition-colors text-white font-bold text-xs tracking-widest uppercase rounded-[3px]">
+          <button className="w-full sm:w-auto px-8 sm:px-24 py-3 bg-[#699e33] hover:bg-[#5b8a2c] transition-colors text-white font-bold text-xs tracking-widest uppercase rounded-[3px]">
             Pay
           </button>
         </div>

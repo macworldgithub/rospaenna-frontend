@@ -10,11 +10,11 @@ export default function Navbar() {
             Visitors Booking
           </div>
         </div>
-        <div>
+        {/* <div>
           <button className="px-6 py-2 border border-white text-white font-bold tracking-wider text-sm hover:bg-white/10 transition-colors uppercase">
             Login
           </button>
-        </div>
+        </div> */}
       </div>
     </nav>
   );

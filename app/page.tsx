@@ -37,7 +37,7 @@ export default function BookGolfMainPage() {
 
         <div className="flex flex-col md:flex-row justify-center items-center md:items-start gap-8 lg:gap-14">
           {/* Card 1: Old Tom Morris */}
-          <Link href="/tee-times" className="group relative block aspect-[1/2.2] w-full max-w-[150px] md:max-w-[200px] lg:max-w-[240px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.02]">
+          <Link href="/tee-times" className="group relative block aspect-[1/2.2] w-full max-w-[200px] md:max-w-[200px] lg:max-w-[240px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.02]">
             <div
               className="absolute inset-0 bg-cover bg-center opacity-80 transition-opacity duration-300 group-hover:opacity-100"
               style={{ backgroundImage: 'url("/images/oldTom.jpg")' }}
@@ -52,7 +52,7 @@ export default function BookGolfMainPage() {
           </Link>
 
           {/* Card 2: Sandy Hills */}
-          <Link href="/tee-times" className="group relative block aspect-[1/2.2] w-full max-w-[150px] md:max-w-[200px] lg:max-w-[240px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.02]">
+          <Link href="/tee-times" className="group relative block aspect-[1/2.2] w-full max-w-[200px] md:max-w-[200px] lg:max-w-[240px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.02]">
             <div
               className="absolute inset-0 bg-cover bg-center opacity-80 transition-opacity duration-300 group-hover:opacity-100"
               style={{ backgroundImage: 'url("/images/sandhill-bg.jpg")' }}
@@ -67,7 +67,7 @@ export default function BookGolfMainPage() {
           </Link>
 
           {/* Card 3: St. Patrick's Links */}
-          <Link href="/tee-times" className="group relative block aspect-[1/2.2] w-full max-w-[150px] md:max-w-[200px] lg:max-w-[240px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.02]">
+          <Link href="/tee-times" className="group relative block aspect-[1/2.2] w-full max-w-[200px] md:max-w-[200px] lg:max-w-[240px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.02]">
             <div
               className="absolute inset-0 bg-cover bg-center opacity-80 transition-opacity duration-300 group-hover:opacity-100"
               style={{ backgroundImage: 'url("/images/ST-patricks.jpg")' }}

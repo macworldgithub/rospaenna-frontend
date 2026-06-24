@@ -6,14 +6,14 @@ function LandingNavbar() {
     <nav className="w-full py-6 px-6 md:px-12 flex items-center justify-between">
       <div className="flex-1"></div>
       <div className="flex-1 flex justify-center items-center">
-        <div className="flex items-center text-[#5a9aa8]">
+        <div className="flex items-center text-[#DBB155]">
           <span className="text-sm font-bold mt-4 tracking-wider">18</span>
           <span className="font-serif text-6xl mx-1 italic leading-none" style={{ fontFamily: 'Georgia, serif' }}>R</span>
           <span className="text-sm font-bold mt-4 tracking-wider">93</span>
         </div>
       </div>
       <div className="flex-1 flex justify-end">
-        <Link href="#" className="hidden md:inline-block text-white bg-[#316070] px-4 py-2 text-[20px] font-medium tracking-wide">
+        <Link href="#" className="hidden md:inline-block text-black bg-[#DBB155] px-4 py-2 text-[20px] font-medium tracking-wide hover:bg-[#c9a04a] transition-colors">
           Book Golf
         </Link>
       </div>
@@ -23,18 +23,19 @@ function LandingNavbar() {
 
 export default function BookGolfMainPage() {
   return (
-    <div className="min-h-screen bg-[#f6f5f3] flex flex-col">
+    <div className="min-h-screen bg-black flex flex-col text-white">
       <LandingNavbar />
       <div className="max-w-[1200px] w-full mx-auto px-6 py-6 flex-grow">
         {/* Container to match screenshot style */}
         <div className="border-b border-gray-300 pb-6 mb-8">
-          <h1 className="text-5xl md:text-[42px] font-serif mb-4 text-[#111]">Tee Times at Rosapenna</h1>
+          <h1 className="text-5xl md:text-[42px] font-serif mb-4 text-[#DBB155]">Tee Times at Rosapenna</h1>
 
-          <p className="md:text-[20px] text-[14px] leading-relaxed max-w-[1000px] font-sans text-black">
-            Click below to book your tee times. Please note that if you're booking Stay & Play, golf will be booked at a discounted rate by the resort as part of that package - <Link href="#" className="text-[#1a8bc4] hover:underline">Book Golf and Resort</Link>. Looking to book for 2027 ? Combine Golf and Resort to <Link href="#" className="text-[#1a8bc4] hover:underline">Book for 2027</Link>.
+          <p className="md:text-[20px] text-[14px] leading-relaxed max-w-[1000px] font-sans text-white">
+            Click below to book your tee times. Please note that if you're booking Stay & Play, golf will be booked at a discounted rate by the resort as part of that package - <Link href="#" className="text-[#DBB155] hover:underline">Book Golf and Resort</Link>. Looking to book for 2027 ? Combine Golf and Resort to <Link href="#" className="text-[#DBB155] hover:underline">Book for 2027</Link>.
           </p>
         </div>
 
+        {/* Existing Cards Section */}
         <div className="flex flex-col md:flex-row justify-center items-center md:items-start gap-8 lg:gap-14">
           {/* Card 1: Old Tom Morris */}
           <Link href="/tee-times" className="group relative block aspect-[1/2.2] w-full max-w-[200px] md:max-w-[200px] lg:max-w-[240px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.02]">

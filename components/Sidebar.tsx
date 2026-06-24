@@ -23,33 +23,33 @@ export default function Sidebar() {
 
   return (
     <div className="w-full lg:w-[380px] flex-shrink-0 flex flex-col gap-6">
-      <div className="bg-white border border-gray-200 p-8 flex flex-col items-center rounded-[3px] shadow-sm">
+      <div className="bg-[#0a0a0a] border border-[#DBB155]/20 p-8 flex flex-col items-center rounded-[3px]">
         {/* Illustration Placeholder */}
         <div className="w-48 h-48 mb-4 flex items-center justify-center">
           <img src="/images/oldMan.png" alt="Old Man Illustration" className="w-full h-full object-contain" />
         </div>
 
-        <a href="https://www.rosapenna.ie" target="_blank" rel="noopener noreferrer" className="text-gray-500 text-[13px] hover:text-[#1a8bc4] transition-colors mb-6 font-medium tracking-wide">
+        <a href="https://www.rosapenna.ie" target="_blank" rel="noopener noreferrer" className="text-[#DBB155] text-[13px] hover:text-[#c9a04a] transition-colors mb-6 font-medium tracking-wide">
           www.rosapenna.ie
         </a>
 
         <div className="w-full flex flex-col gap-2.5 mb-8">
-          <a href="tel:+353749155301" className="w-full bg-[#1a8bc4] hover:bg-[#1572a1] transition-colors text-white py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px] shadow-sm">
+          <a href="tel:+353749155301" className="w-full bg-[#DBB155] hover:bg-[#c9a04a] transition-colors text-black py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px]">
             <Phone className="w-4 h-4" />
             Call Us
           </a>
-          <a href="mailto:golf@rosapenna.ie" className="w-full bg-[#1a8bc4] hover:bg-[#1572a1] transition-colors text-white py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px] shadow-sm">
+          <a href="mailto:golf@rosapenna.ie" className="w-full bg-[#DBB155] hover:bg-[#c9a04a] transition-colors text-black py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px]">
             <Mail className="w-4 h-4" />
             Email Us
           </a>
         </div>
 
-        <p className="text-[11px] text-gray-500 leading-[1.8] text-justify mb-8">
+        <p className="text-[11px] text-gray-400 leading-[1.8] text-justify mb-8">
           Located on the edge of the picturesque Sheephaven Bay, Rosapenna is the proud home to the Old Tom Morris Links designed by Old Tom Morris of St. Andrews in 1893 and a modern great in the Sandy Hills Links laid out by Pat Ruddy of The European Club fame and open for play since 2003. Our new St Patrick's Links by Tom Doak is available to book online via the link on our homepage. This spectacular links opened in late June 2021 and has taken the golf world by storm, rising 5 places in the GOLF Magazine Top 100 in the World rankings 2025-26 to a new high of #44. With a luxury hotel on site, Rosapenna is the perfect venue for a golf break or just a quiet getaway in this beautiful corner of Donegal.
         </p>
 
         {/* Embedded Google Map */}
-        <div className="w-full h-48 mb-4 relative rounded-[3px] overflow-hidden border border-gray-200 shadow-sm group">
+        <div className="w-full h-48 mb-4 relative rounded-[3px] overflow-hidden border border-[#DBB155]/20 group">
           <iframe
             title="User Location Map"
             width="100%"
@@ -73,7 +73,7 @@ export default function Sidebar() {
           href={directionsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full bg-[#1a8bc4] hover:bg-[#1572a1] transition-colors text-white py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px] shadow-sm"
+          className="w-full bg-[#DBB155] hover:bg-[#c9a04a] transition-colors text-black py-2.5 flex items-center justify-center gap-2 font-bold text-[13px] tracking-wider uppercase rounded-[3px]"
         >
           <MapPin className="w-4 h-4" />
           Get Directions

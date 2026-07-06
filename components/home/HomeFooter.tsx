@@ -4,21 +4,21 @@ import Link from "next/link";
 import { MapPin, Phone, Mail } from "lucide-react";
 
 const quickLinks = [
-  "Golf Courses",
-  "Accommodation",
-  "Dining",
-  "Package Builder",
-  "Resort Map",
-  "Gallery",
+  { label: "Golf Courses", href: "#golf" },
+  { label: "Accommodation", href: "#stay" },
+  { label: "Dining", href: "#dine" },
+  { label: "Package Builder", href: "#packages" },
+  { label: "Resort Map", href: "#" },
+  { label: "Gallery", href: "#" },
 ];
 
 const courses = [
-  "St Patrick's Links",
-  "Sandy Hills Links",
-  "Old Tom Morris Links",
-  "Three Links Ticket",
-  "Tee Times",
-  "Green Fees",
+  { label: "St Patrick's Links", href: "#golf" },
+  { label: "Sandy Hills Links", href: "#golf" },
+  { label: "Old Tom Morris Links", href: "#golf" },
+  { label: "Three Links Ticket", href: "#golf" },
+  { label: "Tee Times", href: "#" },
+  { label: "Green Fees", href: "#" },
 ];
 
 export default function HomeFooter() {
@@ -67,16 +67,12 @@ export default function HomeFooter() {
 
             <ul className="space-y-5">
               {quickLinks.map((item) => (
-                <li key={item}>
+                <li key={item.label}>
                   <Link
-                    href="#"
-                    className={`transition ${
-                      // item === "Accommodation"
-                      // ? "text-[#D4AF55]"
-                      "text-[#A3A3A3] hover:text-[#D4AF55]"
-                    }`}
+                    href={item.href}
+                    className={`transition text-[#A3A3A3] hover:text-[#D4AF55]`}
                   >
-                    {item}
+                    {item.label}
                   </Link>
                 </li>
               ))}
@@ -92,12 +88,12 @@ export default function HomeFooter() {
 
             <ul className="space-y-5">
               {courses.map((item) => (
-                <li key={item}>
+                <li key={item.label}>
                   <Link
-                    href="#"
+                    href={item.href}
                     className="text-[#A3A3A3] hover:text-[#D4AF55] transition"
                   >
-                    {item}
+                    {item.label}
                   </Link>
                 </li>
               ))}

@@ -50,13 +50,13 @@ export default function Navbar() {
           </span>
         </button>
 
-        <div className="hidden md:flex items-center gap-4 lg:gap-9">
+        <div className="hidden xl:flex items-center gap-4 lg:gap-9">
           {navLinks.map((link) => (
             <Link
               key={link.label}
               href={link.href}
               onClick={() => setOpen(false)}
-              className="text-white/75 hover:text-white tracking-[0.18em] uppercase text-[11px] font-semibold transition-colors duration-200"
+              className="text-white/75 hover:text-[#c9a04a] tracking-[0.18em] uppercase text-[11px] font-semibold transition-colors duration-200"
             >
               {link.label}
             </Link>
@@ -64,7 +64,7 @@ export default function Navbar() {
         </div>
 
         {/* ── Right Buttons ─────────────────────────────── */}
-        <div className="hidden md:flex items-center gap-2 lg:gap-3">
+        <div className="hidden xl:flex items-center gap-2 lg:gap-3">
           {/* Book Your Stay — outlined */}
           <Link
             href="#packages"
@@ -77,7 +77,7 @@ export default function Navbar() {
           {/* Phone */}
           <a
             href="tel:+35374915301"
-            className="text-white/60 hover:text-white text-[11px] tracking-wide transition-colors whitespace-nowrap"
+            className="text-white/60 hover:text-[#c9a04a] text-[11px] tracking-wide transition-colors whitespace-nowrap"
           >
             📞 +353 74 915 5301
           </a>
@@ -94,7 +94,7 @@ export default function Navbar() {
 
         {/* ── Mobile Hamburger ──────────────────────────── */}
         <button
-          className="md:hidden text-white p-1"
+          className="xl:hidden text-white p-1"
           onClick={() => setOpen(!open)}
           aria-label="Toggle menu"
         >
@@ -102,9 +102,8 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* ── Mobile Menu ───────────────────────────────── */}
       {open && (
-        <div className="relative md:hidden bg-black/95 backdrop-blur-sm border-t border-[#DBB155]/20 px-4 py-6 flex flex-col gap-4">
+        <div className="relative xl:hidden bg-black/95 backdrop-blur-sm border-t border-[#DBB155]/20 px-4 py-6 flex flex-col gap-4">
           {navLinks.map((link) => (
             <Link
               key={link.label}
@@ -123,7 +122,6 @@ export default function Navbar() {
             >
               Book Your Stay
             </Link>
-            {/* Mobile Book Golf → /book-golf (course selection) */}
             <Link
               href="/book-golf"
               onClick={() => setOpen(false)}

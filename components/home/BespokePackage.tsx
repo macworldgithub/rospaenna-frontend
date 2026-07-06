@@ -124,11 +124,6 @@ export default function BespokePackage() {
                 type="date"
                 className="w-full bg-[#0B0B0B] border border-[#181818] h-16 px-5 text-white outline-none focus:border-[#D4AF55]"
               />
-
-              <Calendar
-                size={18}
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-[#777]"
-              />
             </div>
           </div>
 

@@ -45,9 +45,9 @@ export default function HomeFooter() {
             </p>
 
             <div className="flex gap-2 mt-4">
-              <MapPin size={18} className="text-[#D4AF55] mt-1 flex-shrink-0" />
+              <MapPin size={12} className="text-[#D4AF55] mt-1 flex-shrink-0" />
 
-              <p className="text-[#9E9E9E] leading-7">
+              <p className="text-[#9E9E9E] leading-6 text-[14px]">
                 Rosapenna, Downings,
                 <br />
                 Co. Donegal, F93 PN73, Ireland
@@ -68,9 +68,9 @@ export default function HomeFooter() {
                   <Link
                     href="#"
                     className={`transition ${
-                      item === "Accommodation"
-                        ? "text-[#D4AF55]"
-                        : "text-[#A3A3A3] hover:text-white"
+                      // item === "Accommodation"
+                      // ? "text-[#D4AF55]"
+                      "text-[#A3A3A3] hover:text-[#D4AF55]"
                     }`}
                   >
                     {item}
@@ -92,7 +92,7 @@ export default function HomeFooter() {
                 <li key={item}>
                   <Link
                     href="#"
-                    className="text-[#A3A3A3] hover:text-white transition"
+                    className="text-[#A3A3A3] hover:text-[#D4AF55] transition"
                   >
                     {item}
                   </Link>
@@ -109,32 +109,32 @@ export default function HomeFooter() {
             </h3>
 
             <div>
-              <p className="uppercase tracking-[0.25em] text-[10px] text-[#6F6F6F] mb-4">
+              <p className="uppercase tracking-[0.25em] text-[10px] text-[#6F6F6F] mb-2">
                 Hotel Reservations
               </p>
 
-              <div className="flex gap-3 items-center text-white mb-3">
+              <div className="flex gap-3 items-center text-white hover:text-[#D4AF55] mb-1 text-[14px]">
                 <Phone size={16} className="text-[#9B9B9B]" />
                 +353 (0)74 91 55301
               </div>
 
-              <div className="flex gap-3 items-center text-white">
+              <div className="flex gap-3 items-center text-white hover:text-[#D4AF55] text-[14px]">
                 <Mail size={16} className="text-[#9B9B9B]" />
                 reservations@rosapenna.ie
               </div>
             </div>
 
-            <div className="mt-10">
-              <p className="uppercase tracking-[0.25em] text-[10px] text-[#6F6F6F] mb-4">
+            <div className="mt-6">
+              <p className="uppercase tracking-[0.25em] text-[10px] text-[#6F6F6F] mb-2">
                 Golf Enquiries
               </p>
 
-              <div className="flex gap-3 items-center text-white mb-3">
+              <div className="flex gap-3 items-center text-white hover:text-[#D4AF55] mb-1 text-[14px]">
                 <Phone size={16} className="text-[#9B9B9B]" />
                 +353 (0)74 91 55000
               </div>
 
-              <div className="flex gap-3 items-center text-white">
+              <div className="flex gap-3 items-center text-white hover:text-[#D4AF55] text-[14px]">
                 <Mail size={16} className="text-[#9B9B9B]" />
                 golf@rosapenna.ie
               </div>

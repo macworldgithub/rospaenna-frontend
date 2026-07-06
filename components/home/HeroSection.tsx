@@ -52,7 +52,7 @@ export default function HeroSection() {
           </Link>
           <Link
             href="#golf"
-            className="w-full sm:w-auto text-center px-7 py-4 border border-white/40 text-white font-bold tracking-[0.18em] text-[11px] uppercase hover:bg-white/10 transition-all duration-300"
+            className="w-full sm:w-auto text-center px-7 py-4 border border-white/30 text-white font-bold tracking-[0.18em] text-[11px] uppercase hover:bg-[#DBB155]/10 transition-all duration-300 hover:text-[#DBB155] hover:border-[#DBB155]"
           >
             Explore Our Links
           </Link>

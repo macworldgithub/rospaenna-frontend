@@ -10,6 +10,7 @@ import AccommodationCards from "@/components/home/AccommodationCards";
 import BespokePackage from "@/components/home/BespokePackage";
 import CompleteExperience from "@/components/home/CompleteExperience";
 import AmenitiesSection from "@/components/home/AmenitiesSection";
+import ChatWidget from "@/components/ChatWidget";
 
 export default function HomePage() {
   return (
@@ -26,6 +27,7 @@ export default function HomePage() {
       <CompleteExperience />
       <AmenitiesSection />
       <HomeFooter />
+      <ChatWidget />
     </div>
   );
 }

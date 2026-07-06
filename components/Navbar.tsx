@@ -1,42 +1,61 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 
 const navLinks = [
-  { label: "Golf",       href: "#golf"       },
-  { label: "Stay",       href: "#stay"       },
-  { label: "Dine",       href: "#dine"       },
+  { label: "Golf", href: "#golf" },
+  { label: "Stay", href: "#stay" },
+  { label: "Dine", href: "#experience" },
   { label: "Experience", href: "#experience" },
-  { label: "Contact",    href: "#contact"    },
+  { label: "Contact", href: "#contact" },
 ];
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 40);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
-    <nav className="w-full absolute top-0 left-0 z-50">
-      {/* Subtle top gradient so nav is readable over hero */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
+    <nav
+      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
+        scrolled
+          ? "bg-[#050505]/95 backdrop-blur-sm shadow-[0_4px_30px_rgba(0,0,0,0.45)]"
+          : "bg-transparent"
+      }`}
+    >
+      <div className="absolute inset-0 bg-linear-to-b from-black/60 to-transparent pointer-events-none" />
 
-      <div className="relative max-w-[1400px] mx-auto px-6 md:px-10 py-5 flex items-center justify-between">
-
-        <Link href="/" className="flex flex-col leading-none shrink-0">
+      <div className="relative max-w-350 mx-auto px-4 sm:px-6 md:px-10 py-4 sm:py-5 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="flex flex-col leading-none shrink-0 text-left"
+        >
           <span className="text-white font-bold tracking-[0.28em] uppercase text-[14px] md:text-[15px]">
             ROSAPENNA
           </span>
-          <span className="text-[#DBB155] tracking-[0.18em] uppercase text-[8px] md:text-[9px] font-medium">
+          <span className="text-[#DBB155] tracking-[0.18em] uppercase text-[8px] md:text-[10px] mt-2 font-medium">
             HOTEL &amp; GOLF RESORT
           </span>
-        </Link>
+        </button>
 
-        {/* ── Desktop Nav Links ─────────────────────────── */}
-        <div className="hidden md:flex items-center gap-7 lg:gap-9">
+        <div className="hidden md:flex items-center gap-4 lg:gap-9">
           {navLinks.map((link) => (
             <Link
               key={link.label}
               href={link.href}
+              onClick={() => setOpen(false)}
               className="text-white/75 hover:text-white tracking-[0.18em] uppercase text-[11px] font-semibold transition-colors duration-200"
             >
               {link.label}
@@ -45,10 +64,11 @@ export default function Navbar() {
         </div>
 
         {/* ── Right Buttons ─────────────────────────────── */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-2 lg:gap-3">
           {/* Book Your Stay — outlined */}
           <Link
-            href="#stay"
+            href="#packages"
+            onClick={() => setOpen(false)}
             className="px-4 py-2.5 border border-[#DBB155] text-[#DBB155] font-bold tracking-[0.15em] text-[10px] uppercase hover:bg-[#DBB155] hover:text-black transition-all duration-200 whitespace-nowrap"
           >
             Book Your Stay
@@ -65,6 +85,7 @@ export default function Navbar() {
           {/* ── Book Golf ── navigates to /book-golf (course selection) ── */}
           <Link
             href="/book-golf"
+            onClick={() => setOpen(false)}
             className="px-5 py-2.5 bg-[#DBB155] text-black font-bold tracking-[0.15em] text-[10px] uppercase hover:bg-[#c9a04a] transition-all duration-200 shadow-md whitespace-nowrap"
           >
             Book Golf
@@ -83,7 +104,7 @@ export default function Navbar() {
 
       {/* ── Mobile Menu ───────────────────────────────── */}
       {open && (
-        <div className="relative md:hidden bg-black/95 backdrop-blur-sm border-t border-[#DBB155]/20 px-6 py-6 flex flex-col gap-4">
+        <div className="relative md:hidden bg-black/95 backdrop-blur-sm border-t border-[#DBB155]/20 px-4 py-6 flex flex-col gap-4">
           {navLinks.map((link) => (
             <Link
               key={link.label}
@@ -96,7 +117,7 @@ export default function Navbar() {
           ))}
           <div className="flex flex-col gap-3 pt-4 border-t border-[#DBB155]/20">
             <Link
-              href="#stay"
+              href="#packages"
               onClick={() => setOpen(false)}
               className="text-center py-3 border border-[#DBB155] text-[#DBB155] font-bold tracking-[0.15em] text-[11px] uppercase"
             >

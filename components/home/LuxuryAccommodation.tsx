@@ -2,7 +2,7 @@ import Image from "next/image";
 
 export default function LuxuryAccommodation() {
   return (
-    <section className="relative h-[420px] md:h-[600px] w-full overflow-hidden">
+    <section className="relative h-80 sm:h-105 md:h-150 w-full overflow-hidden">
       {/* Background Image */}
       <Image
         src="/images/Luxury.png" // Replace with your image
@@ -28,7 +28,7 @@ export default function LuxuryAccommodation() {
           </div>
 
           {/* Main Heading */}
-          <h1 className="text-white font-serif font-semibold text-2xl md:text-4xl lg:text-6xl leading-tight">
+          <h1 className="text-white font-serif font-semibold text-2xl sm:text-3xl md:text-4xl lg:text-6xl leading-tight">
             Luxury Accommodation
           </h1>
         </div>

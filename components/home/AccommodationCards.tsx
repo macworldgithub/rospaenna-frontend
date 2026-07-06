@@ -33,7 +33,7 @@ const rooms = [
 
 export default function AccommodationCards() {
   return (
-    <section className="bg-[#050505] py-24 px-6">
+    <section id="stay" className="bg-[#050505] py-24 px-6 scroll-mt-24">
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {rooms.map((room, index) => {
@@ -42,7 +42,7 @@ export default function AccommodationCards() {
             return (
               <div
                 key={index}
-                className="bg-[#070707] border border-[#111] hover:border-[#9f7a32] transition-all duration-300 p-8"
+                className="bg-[#070707] border border-[#111] hover:border-[#9f7a32] transition-all duration-300 p-6 sm:p-8"
               >
                 {/* Icon */}
                 <div className="w-8 h-8 border border-[#9f7a32] flex items-center justify-center mb-8">

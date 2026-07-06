@@ -29,7 +29,10 @@ const amenities = [
 
 export default function AmenitiesSection() {
   return (
-    <section className="bg-[#050505] py-24 px-6">
+    <section
+      id="experience"
+      className="bg-[#050505] py-16 sm:py-24 px-4 sm:px-6"
+    >
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-8">
           {amenities.map((item, index) => {
@@ -38,7 +41,7 @@ export default function AmenitiesSection() {
             return (
               <div
                 key={index}
-                className="bg-[#070707] border border-[#141414] hover:border-[#C9A24A] transition-all duration-300 p-9 group"
+                className="bg-[#070707] border border-[#141414] hover:border-[#C9A24A] transition-all duration-300 p-6 sm:p-9 group"
               >
                 {/* Icon */}
                 <div className="w-8 h-8 border border-[#C9A24A] flex items-center justify-center mb-4">

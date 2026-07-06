@@ -30,8 +30,8 @@ const courses = [
 
 export default function CourseShowcase() {
   return (
-    <section className="bg-black text-white py-24 px-6">
-      <div className="max-w-[1400px] mx-auto grid grid-cols-1 gap-12">
+    <section className="bg-black text-white py-10 px-4 sm:px-6">
+      <div className="max-w-350 mx-auto grid grid-cols-1 gap-12">
         {courses.map((c, i) => (
           <div
             key={c.title}
@@ -41,7 +41,7 @@ export default function CourseShowcase() {
           >
             {/* Image */}
             <div
-              className={`w-full h-[420px] relative ${i % 2 === 1 ? "lg:order-2" : ""}`}
+              className={`w-full h-105 relative ${i % 2 === 1 ? "lg:order-2" : ""}`}
             >
               <Image
                 src={c.img}
@@ -54,12 +54,12 @@ export default function CourseShowcase() {
 
             {/* Text */}
             <div
-              className={`flex flex-col justify-center px-6 lg:px-12 ${i % 2 === 1 ? "lg:order-1" : ""}`}
+              className={`flex flex-col justify-center px-0 sm:px-6 lg:px-12 ${i % 2 === 1 ? "lg:order-1" : ""}`}
             >
               <p className="text-[#DBB155] tracking-[0.3em] uppercase text-[11px] font-semibold mb-3">
                 Established 1893
               </p>
-              <h3 className="font-serif text-white text-4xl md:text-5xl leading-tight mb-4">
+              <h3 className="font-serif text-white text-3xl sm:text-4xl md:text-5xl leading-tight mb-4">
                 {c.title}
               </h3>
               <p className="text-gray-400 max-w-2xl leading-relaxed mb-6">

@@ -23,11 +23,14 @@ const courses = [
 
 export default function HomeFooter() {
   return (
-    <footer className="bg-[#050505] border-t border-[#1A1A1A] text-white">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-20">
+    <footer
+      id="contact"
+      className="bg-[#050505] border-t border-[#1A1A1A] text-white scroll-mt-24"
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
         {/* Top */}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-16 lg:gap-24">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 sm:gap-16 lg:gap-24">
           {/* Logo */}
 
           <div>
@@ -45,7 +48,7 @@ export default function HomeFooter() {
             </p>
 
             <div className="flex gap-2 mt-4">
-              <MapPin size={12} className="text-[#D4AF55] mt-1 flex-shrink-0" />
+              <MapPin size={12} className="text-[#D4AF55] mt-1 shrink-0" />
 
               <p className="text-[#9E9E9E] leading-6 text-[14px]">
                 Rosapenna, Downings,
@@ -144,7 +147,7 @@ export default function HomeFooter() {
 
         {/* Bottom */}
 
-        <div className="border-t border-[#141414] mt-20 pt-8 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="border-t border-[#141414] mt-14 sm:mt-20 pt-8 flex flex-col md:flex-row justify-between items-center gap-6">
           <p className="text-[#666] text-sm text-center md:text-left">
             © 2026 Rosapenna Hotel & Golf Resort. All rights reserved.
           </p>

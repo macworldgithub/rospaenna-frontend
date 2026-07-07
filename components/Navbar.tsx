@@ -81,8 +81,7 @@ export default function Navbar() {
           >
             📞 +353 74 915 5301
           </a>
-
-          {/* ── Book Golf ── navigates to /book-golf (course selection) ── */}
+        
           <Link
             href="/book-golf"
             onClick={() => setOpen(false)}

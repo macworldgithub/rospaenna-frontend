@@ -6,7 +6,9 @@ export default function Footer() {
           {/* Column 1 */}
           <div className="font-semibold text-gray-300">
             <ul className="space-y-0.5">
-              <li className="text-[#DBB155]">Old Tom Morris Links / Sandy Hills Links</li>
+              <li className="text-[#DBB155]">
+                Old Tom Morris Links / Sandy Hills Links
+              </li>
               <li>Rosapenna Golf Resort</li>
               <li>Sheephaven Bay</li>
               <li>Downings</li>
@@ -21,24 +23,40 @@ export default function Footer() {
           <div className="font-semibold text-gray-300">
             <div>T: +353 (0)74 915 5000</div>
             <div>E: brs@rosapenna.ie</div>
-            <div className="mt-4 text-[#DBB155] cursor-pointer transition-colors">Privacy Policy</div>
-            <div className="text-[#DBB155] cursor-pointer transition-colors">Terms &amp; Conditions</div>
+            <div className="mt-4 text-[#DBB155] cursor-pointer transition-colors">
+              Privacy Policy
+            </div>
+            <div className="text-[#DBB155] cursor-pointer transition-colors">
+              Terms &amp; Conditions
+            </div>
           </div>
 
           {/* Column 3 */}
           <div>
-            <div className="font-semibold mb-2 text-[#DBB155]">All major credit cards accepted</div>
+            <div className="font-semibold mb-2 text-[#DBB155]">
+              All major credit cards accepted
+            </div>
             <div className="flex gap-2 items-center">
               {/* Stripe */}
-              <div className="font-bold text-white text-xl tracking-tighter">stripe</div>
+              <div className="font-bold text-white text-xl tracking-tighter">
+                stripe
+              </div>
               {/* Mastercard */}
-              <svg width="32" height="20" viewBox="0 0 32 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg
+                width="32"
+                height="20"
+                viewBox="0 0 32 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
                 <circle cx="10" cy="10" r="10" fill="#EB001B" />
                 <circle cx="22" cy="10" r="10" fill="#F79E1B" />
               </svg>
               {/* Visa */}
               <div className="bg-white px-1.5 py-0.5 rounded-sm">
-                <div className="text-[#1A1F71] font-bold text-xs italic tracking-tighter">VISA</div>
+                <div className="text-[#1A1F71] font-bold text-xs italic tracking-tighter">
+                  VISA
+                </div>
               </div>
             </div>
           </div>
@@ -46,8 +64,12 @@ export default function Footer() {
           {/* Column 4 */}
           <div className="flex md:justify-end items-start">
             <div className="flex items-center gap-1">
-              <span className="text-4xl font-black tracking-tighter text-[#DBB155]">BRS</span>
-              <span className="bg-[#DBB155] text-black px-2 py-0.5 rounded-md text-2xl font-bold tracking-tight">Core</span>
+              <span className="text-4xl font-black tracking-tighter text-[#DBB155]">
+                BRS
+              </span>
+              <span className="bg-[#DBB155] text-black px-2 py-0.5 rounded-md text-2xl font-bold tracking-tight">
+                Core
+              </span>
             </div>
           </div>
         </div>

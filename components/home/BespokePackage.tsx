@@ -26,7 +26,10 @@ const ROOM_RATES = {
   CLASSIC: { SINGLE: { low: 200, high: 280 }, DOUBLE: { low: 220, high: 300 } },
   DELUXE: { SINGLE: { low: 230, high: 310 }, DOUBLE: { low: 250, high: 330 } },
   BAYVIEW: { SINGLE: { low: 280, high: 360 }, DOUBLE: { low: 300, high: 380 } },
-  PENTHOUSE: { SINGLE: { low: 400, high: 480 }, DOUBLE: { low: 420, high: 500 } },
+  PENTHOUSE: {
+    SINGLE: { low: 400, high: 480 },
+    DOUBLE: { low: 420, high: 500 },
+  },
 } as Record<string, Record<string, { low: number; high: number }>>;
 
 const GOLF_RATES = { OLD_TOM: 160, SANDY_HILLS: 220, ST_PATRICKS: 330 };
@@ -34,16 +37,39 @@ const GOLF_RATES = { OLD_TOM: 160, SANDY_HILLS: 220, ST_PATRICKS: 330 };
 // Assuming dates in MM-DD format
 const CLOSURES = {
   ST_PATRICKS: [
-    "04-13", "04-15", "04-20", "04-27",
-    "05-06", "05-11", "05-18", "05-25",
-    "06-01", "06-08", "06-15", "06-22", "06-29",
-    "07-08", "07-20", "07-21", "07-27",
-    "08-03", "08-05", "08-10", "08-17", "08-26", "08-31",
-    "09-07", "09-28",
-    "10-05", "10-07", "10-12", "10-14", "10-18"
+    "04-13",
+    "04-15",
+    "04-20",
+    "04-27",
+    "05-06",
+    "05-11",
+    "05-18",
+    "05-25",
+    "06-01",
+    "06-08",
+    "06-15",
+    "06-22",
+    "06-29",
+    "07-08",
+    "07-20",
+    "07-21",
+    "07-27",
+    "08-03",
+    "08-05",
+    "08-10",
+    "08-17",
+    "08-26",
+    "08-31",
+    "09-07",
+    "09-28",
+    "10-05",
+    "10-07",
+    "10-12",
+    "10-14",
+    "10-18",
   ],
   OLD_TOM: ["07-22"],
-  SANDY_HILLS: ["04-19", "04-20", "04-21", "07-20"]
+  SANDY_HILLS: ["04-19", "04-20", "04-21", "07-20"],
 };
 
 export default function BespokePackage() {
@@ -71,17 +97,17 @@ export default function BespokePackage() {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const totalRounds = stPatricksRounds + sandyHillsRounds + oldTomMorrisRounds;
-  
+
   // Validation Logic
   const getMinRounds = (n: number) => (n <= 3 ? 2 : n <= 5 ? 3 : 4);
   const minRequiredRounds = getMinRounds(nights);
   const hasEnoughRounds = totalRounds >= minRequiredRounds;
-  
+
   const closureWarnings = useMemo(() => {
     if (!arrivalDate) return [];
     const warnings: string[] = [];
     const startDate = new Date(arrivalDate);
-    
+
     const checkClosure = (courseName: string, closureDates: string[]) => {
       for (let i = 0; i < nights; i++) {
         const currentDate = new Date(startDate);
@@ -89,19 +115,30 @@ export default function BespokePackage() {
         const mm = String(currentDate.getMonth() + 1).padStart(2, "0");
         const dd = String(currentDate.getDate()).padStart(2, "0");
         const dateString = `${mm}-${dd}`;
-        
+
         if (closureDates.includes(dateString)) {
-          warnings.push(`${courseName} is closed on ${currentDate.toDateString()} during your stay.`);
+          warnings.push(
+            `${courseName} is closed on ${currentDate.toDateString()} during your stay.`,
+          );
         }
       }
     };
-    
-    if (stPatricksRounds > 0) checkClosure("St Patrick's Links", CLOSURES.ST_PATRICKS);
-    if (sandyHillsRounds > 0) checkClosure("Sandy Hills Links", CLOSURES.SANDY_HILLS);
-    if (oldTomMorrisRounds > 0) checkClosure("Old Tom Morris Links", CLOSURES.OLD_TOM);
-    
+
+    if (stPatricksRounds > 0)
+      checkClosure("St Patrick's Links", CLOSURES.ST_PATRICKS);
+    if (sandyHillsRounds > 0)
+      checkClosure("Sandy Hills Links", CLOSURES.SANDY_HILLS);
+    if (oldTomMorrisRounds > 0)
+      checkClosure("Old Tom Morris Links", CLOSURES.OLD_TOM);
+
     return [...new Set(warnings)];
-  }, [arrivalDate, nights, stPatricksRounds, sandyHillsRounds, oldTomMorrisRounds]);
+  }, [
+    arrivalDate,
+    nights,
+    stPatricksRounds,
+    sandyHillsRounds,
+    oldTomMorrisRounds,
+  ]);
 
   // Pricing Logic
   const pricing = useMemo(() => {
@@ -113,8 +150,10 @@ export default function BespokePackage() {
 
     const isDouble = roomType !== "SINGLE";
     const pricingRoomType = isDouble ? "DOUBLE" : "SINGLE";
-    const ratePerNight = ROOM_RATES[roomStandard]?.[pricingRoomType]?.[season as "low" | "high"] || 0;
-    
+    const ratePerNight =
+      ROOM_RATES[roomStandard]?.[pricingRoomType]?.[season as "low" | "high"] ||
+      0;
+
     const numRooms = isDouble ? Math.ceil(groupSize / 2) : groupSize;
     const totalRoomCost = ratePerNight * nights * numRooms;
 
@@ -142,7 +181,16 @@ export default function BespokePackage() {
       deposit: total * 0.25,
       balance: total * 0.75,
     };
-  }, [arrivalDate, nights, groupSize, roomType, roomStandard, stPatricksRounds, sandyHillsRounds, oldTomMorrisRounds]);
+  }, [
+    arrivalDate,
+    nights,
+    groupSize,
+    roomType,
+    roomStandard,
+    stPatricksRounds,
+    sandyHillsRounds,
+    oldTomMorrisRounds,
+  ]);
 
   const nextStep = () => {
     if (currentStep === 3 && !hasEnoughRounds) return;
@@ -169,8 +217,9 @@ export default function BespokePackage() {
             Booking Confirmed
           </h2>
           <p className="text-[#A8A8A8] leading-8 mb-8">
-            Thank you, {fullName || "Guest"}. Your bespoke package has been confirmed. 
-            An itinerary PDF and payment receipt have been emailed to {email || "your inbox"}.
+            Thank you, {fullName || "Guest"}. Your bespoke package has been
+            confirmed. An itinerary PDF and payment receipt have been emailed to{" "}
+            {email || "your inbox"}.
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -189,12 +238,6 @@ export default function BespokePackage() {
       className="bg-[#050505] py-10 px-4 sm:px-5 scroll-mt-24 relative"
     >
       <div className="max-w-230 mx-auto">
-        {/* Floating Price Bar */}
-        <div className="absolute top-10 right-4 sm:right-10 bg-[#111111] border border-[#D4AF55] p-4 flex flex-col items-end mb-8 md:mb-0 z-10 hidden sm:flex">
-          <span className="uppercase tracking-[0.2em] text-[9px] text-[#A8A8A8]">Estimated Total</span>
-          <span className="font-serif text-[#D4AF55] text-2xl">€{pricing.total.toLocaleString()}</span>
-        </div>
-
         {/* Heading */}
 
         <p className="uppercase tracking-[0.45em] text-[11px] text-[#D4AF55]">
@@ -607,17 +650,29 @@ export default function BespokePackage() {
               <div className="mt-6 space-y-3">
                 {!hasEnoughRounds && (
                   <div className="border border-red-900/50 bg-red-950/20 p-4 flex gap-4 items-start">
-                    <AlertTriangle size={18} className="text-red-500 mt-1 shrink-0" />
+                    <AlertTriangle
+                      size={18}
+                      className="text-red-500 mt-1 shrink-0"
+                    />
                     <p className="text-red-400 text-sm leading-6">
-                      Based on your stay of {nights} nights, a minimum of {minRequiredRounds} total rounds must be selected.
+                      Based on your stay of {nights} nights, a minimum of{" "}
+                      {minRequiredRounds} total rounds must be selected.
                     </p>
                   </div>
                 )}
 
                 {closureWarnings.map((warning, idx) => (
-                  <div key={idx} className="border border-yellow-900/50 bg-yellow-950/20 p-4 flex gap-4 items-start">
-                    <AlertTriangle size={18} className="text-yellow-500 mt-1 shrink-0" />
-                    <p className="text-yellow-400 text-sm leading-6">{warning}</p>
+                  <div
+                    key={idx}
+                    className="border border-yellow-900/50 bg-yellow-950/20 p-4 flex gap-4 items-start"
+                  >
+                    <AlertTriangle
+                      size={18}
+                      className="text-yellow-500 mt-1 shrink-0"
+                    />
+                    <p className="text-yellow-400 text-sm leading-6">
+                      {warning}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -628,82 +683,83 @@ export default function BespokePackage() {
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="border border-[#5d4a20] bg-[#19140C] p-4 flex gap-4 items-start">
                 <Sparkles size={18} className="text-[#D4AF55] mt-1 shrink-0" />
-                <p className="text-[#E2BE69] leading-8">
-                  Your package is looking wonderful. Please review the details below. Once confirmed, you will instantly receive your itinerary in PDF format.
+                <p className="text-[#E2BE69] leading-7">
+                  Your package is looking wonderful. Please review the details
+                  below. Once confirmed, you will instantly receive your
+                  itinerary in PDF format.
                 </p>
               </div>
 
               <div className="mt-10 space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-6 border-b border-[#1A1A1A] pb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-6">
                   <div className="flex items-center justify-between">
-                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">Arrival</span>
-                    <span className="text-white">{arrivalDate || "Not Selected"}</span>
+                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">
+                      Arrival
+                    </span>
+                    <span className="text-white">
+                      {arrivalDate || "Not Selected"}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">Nights</span>
+                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">
+                      Nights
+                    </span>
                     <span className="text-white">{nights}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">Group Size</span>
+                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">
+                      Group Size
+                    </span>
                     <span className="text-white">{groupSize} Guests</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">Room</span>
+                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">
+                      Room
+                    </span>
                     <span className="text-white capitalize">
                       {roomStandard.toLowerCase()}{" "}
-                      {roomType === "TWIN / DOUBLE" ? "Twin" : roomType.toLowerCase()}
+                      {roomType === "TWIN / DOUBLE"
+                        ? "Twin"
+                        : roomType.toLowerCase()}
                     </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-6 border-b border-[#1A1A1A] pb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-6 pb-8">
                   <div className="flex items-center justify-between">
-                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">St Patrick's</span>
-                    <span className="text-white">{stPatricksRounds} Round(s)</span>
+                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">
+                      St Patrick's
+                    </span>
+                    <span className="text-white">
+                      {stPatricksRounds} Round(s)
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">Sandy Hills</span>
-                    <span className="text-white">{sandyHillsRounds} Round(s)</span>
+                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">
+                      Sandy Hills
+                    </span>
+                    <span className="text-white">
+                      {sandyHillsRounds} Round(s)
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">Old Tom Morris</span>
-                    <span className="text-white">{oldTomMorrisRounds} Round(s)</span>
+                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">
+                      Old Tom Morris
+                    </span>
+                    <span className="text-white">
+                      {oldTomMorrisRounds} Round(s)
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">Total Rounds</span>
+                    <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">
+                      Total Rounds
+                    </span>
                     <span className="text-white">{totalRounds}</span>
-                  </div>
-                </div>
-
-                <div className="border border-[#D4AF55]/30 bg-[#0A0A0A] p-6 space-y-4">
-                  <div className="flex justify-between text-[#A8A8A8] text-sm">
-                    <span>Accommodation Cost</span>
-                    <span>€{pricing.roomCost.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-[#A8A8A8] text-sm">
-                    <span>Golf Cost (Inc. Three Links Ticket if applicable)</span>
-                    <span>€{pricing.golfCost.toLocaleString()}</span>
-                  </div>
-                  <div className="h-px w-full bg-[#1A1A1A] my-4"></div>
-                  <div className="flex justify-between items-center text-white">
-                    <span className="uppercase tracking-[0.2em] text-[12px] font-semibold">Total Package Price</span>
-                    <span className="font-serif text-2xl text-[#D4AF55]">€{pricing.total.toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="mt-4 flex flex-col sm:flex-row justify-between gap-4 p-4 bg-[#D4AF55]/10 border border-[#D4AF55]/20 rounded-sm">
-                    <div>
-                      <span className="block text-[11px] uppercase tracking-[0.1em] text-[#D4AF55] mb-1">Due Now (25%)</span>
-                      <span className="text-white font-serif text-xl">€{pricing.deposit.toLocaleString()}</span>
-                    </div>
-                    <div>
-                      <span className="block text-[11px] uppercase tracking-[0.1em] text-[#A8A8A8] mb-1">Due 6 weeks prior (75%)</span>
-                      <span className="text-white font-serif text-xl">€{pricing.balance.toLocaleString()}</span>
-                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-10">
+              <div className="mt-4">
                 <label className="block uppercase tracking-[0.3em] text-[11px] text-[#A88945] mb-4">
                   Additional Requests
                 </label>
@@ -736,9 +792,10 @@ export default function BespokePackage() {
                 onClick={nextStep}
                 disabled={currentStep === 3 && !hasEnoughRounds}
                 className={`transition-all px-10 h-12 min-w-42.5 uppercase tracking-[0.35em] text-[11px] font-semibold flex items-center justify-center gap-3
-                  ${currentStep === 3 && !hasEnoughRounds 
-                    ? "bg-[#222] text-[#555] cursor-not-allowed" 
-                    : "bg-[#D4AF55] hover:bg-[#c7a042] text-black"
+                  ${
+                    currentStep === 3 && !hasEnoughRounds
+                      ? "bg-[#222] text-[#555] cursor-not-allowed"
+                      : "bg-[#D4AF55] hover:bg-[#c7a042] text-black"
                   }`}
               >
                 Continue

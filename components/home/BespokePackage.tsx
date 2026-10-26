@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { demoBookingRules, minimumDemoRounds, demoPaymentSplit } from "@/lib/demoBookingRules";
 import {
   Calendar,
   Users,
@@ -10,7 +11,6 @@ import {
   Sparkles,
   ArrowLeft,
   ArrowRight,
-  Send,
   AlertTriangle,
 } from "lucide-react";
 
@@ -33,6 +33,8 @@ const ROOM_RATES = {
 } as Record<string, Record<string, { low: number; high: number }>>;
 
 const GOLF_RATES = { OLD_TOM: 160, SANDY_HILLS: 220, ST_PATRICKS: 330 };
+const irelandToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Dublin" }).format(new Date());
+const euro = (amount: number) => new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(amount);
 
 // Assuming dates in MM-DD format
 const CLOSURES = {
@@ -93,15 +95,14 @@ export default function BespokePackage() {
   const [playOnDeparture, setPlayOnDeparture] = useState(false);
 
   const [additionalRequests, setAdditionalRequests] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [showDemoPreview, setShowDemoPreview] = useState(false);
 
   const totalRounds = stPatricksRounds + sandyHillsRounds + oldTomMorrisRounds;
 
   // Validation Logic
-  const getMinRounds = (n: number) => (n <= 3 ? 2 : n <= 5 ? 3 : 4);
-  const minRequiredRounds = getMinRounds(nights);
-  const hasEnoughRounds = totalRounds >= minRequiredRounds;
+  const minRequiredRounds = minimumDemoRounds(nights);
+  const hasEnoughRounds = minRequiredRounds !== null && totalRounds >= minRequiredRounds;
+  const hasValidArrival = /^\d{4}-\d{2}-\d{2}$/.test(arrivalDate) && arrivalDate >= irelandToday();
 
   const closureWarnings = useMemo(() => {
     if (!arrivalDate) return [];
@@ -158,16 +159,9 @@ export default function BespokePackage() {
     const totalRoomCost = ratePerNight * nights * numRooms;
 
     let totalGolfCost = 0;
-    let stPR = stPatricksRounds * groupSize;
-    let shR = sandyHillsRounds * groupSize;
-    let otmR = oldTomMorrisRounds * groupSize;
-
-    // Apply Three Links Ticket
-    const threeLinksTickets = Math.min(stPR, shR, otmR);
-    totalGolfCost += threeLinksTickets * 250;
-    stPR -= threeLinksTickets;
-    shR -= threeLinksTickets;
-    otmR -= threeLinksTickets;
+    const stPR = stPatricksRounds * groupSize;
+    const shR = sandyHillsRounds * groupSize;
+    const otmR = oldTomMorrisRounds * groupSize;
 
     totalGolfCost += stPR * GOLF_RATES.ST_PATRICKS;
     totalGolfCost += shR * GOLF_RATES.SANDY_HILLS;
@@ -178,8 +172,7 @@ export default function BespokePackage() {
       total,
       roomCost: totalRoomCost,
       golfCost: totalGolfCost,
-      deposit: total * 0.25,
-      balance: total * 0.75,
+      ...demoPaymentSplit(total),
     };
   }, [
     arrivalDate,
@@ -193,20 +186,18 @@ export default function BespokePackage() {
   ]);
 
   const nextStep = () => {
+    if (currentStep === 0 && !hasValidArrival) return;
     if (currentStep === 3 && !hasEnoughRounds) return;
     setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
   };
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
 
   const handleBook = () => {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSuccess(true);
-    }, 2000);
+    if (!hasEnoughRounds || !hasValidArrival) return;
+    setShowDemoPreview(true);
   };
 
-  if (isSuccess) {
+  if (showDemoPreview) {
     return (
       <section className="bg-[#050505] py-20 px-4 sm:px-5 min-h-[60vh] flex items-center justify-center">
         <div className="max-w-2xl mx-auto text-center border border-[#181818] bg-[#070707] p-10">
@@ -214,18 +205,19 @@ export default function BespokePackage() {
             <Check size={32} className="text-[#D4AF55]" />
           </div>
           <h2 className="font-serif font-semibold text-white text-3xl mb-4">
-            Booking Confirmed
+            Demo Package Preview
           </h2>
           <p className="text-[#A8A8A8] leading-8 mb-8">
-            Thank you, {fullName || "Guest"}. Your bespoke package has been
-            confirmed. An itinerary PDF and payment receipt have been emailed to{" "}
-            {email || "your inbox"}.
+            Demo preview for {fullName || "Guest"}.
+            No rooms or tee times have been reserved, no payment has been collected,
+            and no confirmation email or PDF has been created. Your selections are
+            retained so you can return to the review and edit them.
           </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => setShowDemoPreview(false)}
             className="text-[#D4AF55] uppercase tracking-[0.2em] text-[11px] font-semibold hover:text-white transition-colors border border-[#D4AF55] px-8 py-4"
           >
-            Start New Booking
+            Return to Package Review
           </button>
         </div>
       </section>
@@ -254,6 +246,13 @@ export default function BespokePackage() {
           Our intelligent booking assistant will guide you through creating the
           perfect stay and golf experience.
         </p>
+
+        <div role="status" className="mt-4 border border-[#5d4a20] bg-[#19140C] p-4 text-[#E2BE69] text-sm leading-7">
+          Demo: room prices, closure warnings and package totals are illustrative.
+          Live golf prices and tee times are available in Book Golf.
+          The demo uses a {demoBookingRules.payment.depositPercent}% non-refundable deposit,
+          with the balance due {demoBookingRules.payment.balanceDueWeeksBeforeArrival} weeks before arrival.
+        </div>
 
         {/* Stepper */}
 
@@ -313,7 +312,7 @@ export default function BespokePackage() {
                 <Sparkles size={18} className="text-[#D4AF55] mt-1 shrink-0" />
                 <p className="text-[#E2BE69] leading-7">
                   For the best links golf experience, we recommend visiting
-                  between May and September when Donegal's weather is at its
+                  between May and September when Donegal&apos;s weather is at its
                   finest. Midweek stays often offer the best availability on our
                   championship courses.
                 </p>
@@ -327,6 +326,7 @@ export default function BespokePackage() {
                 <div className="relative">
                   <input
                     type="date"
+                    min={irelandToday()}
                     value={arrivalDate}
                     onChange={(e) => setArrivalDate(e.target.value)}
                     className="w-full bg-[#0B0B0B] border border-[#181818] h-16 px-5 text-white outline-none focus:border-[#D4AF55] scheme-dark"
@@ -340,7 +340,7 @@ export default function BespokePackage() {
                   Number of Nights
                 </label>
                 <div className="flex flex-wrap gap-3">
-                  {[2, 3, 4, 5, 6, 7].map((num) => (
+                  {[2, 3, 4, 5].map((num) => (
                     <button
                       key={num}
                       onClick={() => setNights(num)}
@@ -364,7 +364,7 @@ export default function BespokePackage() {
               <div className="border border-[#5d4a20] bg-[#19140C] p-4 flex gap-4 items-start">
                 <Sparkles size={18} className="text-[#D4AF55] mt-1 shrink-0" />
                 <p className="text-[#E2BE69] leading-8">
-                  Groups of 4 are ideal for golf — you'll have a perfect
+                  Groups of 4 are ideal for golf — you&apos;ll have a perfect
                   fourball for each round. We can arrange custom tee times to
                   keep your group together across all three courses.
                 </p>
@@ -499,10 +499,9 @@ export default function BespokePackage() {
               <div className="border border-[#5d4a20] bg-[#19140C] p-4 flex gap-4 items-start">
                 <Sparkles size={18} className="text-[#D4AF55] mt-1 shrink-0" />
                 <p className="text-[#E2BE69] leading-8">
-                  Excellent choice! Playing all three courses is the ultimate
-                  Rosapenna experience. Our Three Links Ticket offers the best
-                  value at just €250 per person — a significant saving over
-                  individual green fees.
+                  Select your rounds for the demo package. Two or three nights
+                  require at least two rounds; four or five nights require three.
+                  Package golf amounts are estimates until the live package integration is complete.
                 </p>
               </div>
 
@@ -515,7 +514,7 @@ export default function BespokePackage() {
                   <div className="border border-[#181818] p-5 flex items-center justify-between">
                     <div>
                       <h4 className="text-white text-md font-serif">
-                        St Patrick's Links
+                        St Patrick&apos;s Links
                       </h4>
                       <span className="uppercase tracking-[0.2em] text-[9px] text-[#D4AF55] mt-1 block">
                         World Top 50
@@ -550,7 +549,7 @@ export default function BespokePackage() {
                         Sandy Hills Links
                       </h4>
                       <span className="uppercase tracking-[0.2em] text-[9px] text-[#D4AF55] mt-1 block">
-                        Ireland's Top 50
+                        Ireland&apos;s Top 50
                       </span>
                     </div>
                     <div className="flex items-center gap-4">
@@ -683,10 +682,9 @@ export default function BespokePackage() {
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="border border-[#5d4a20] bg-[#19140C] p-4 flex gap-4 items-start">
                 <Sparkles size={18} className="text-[#D4AF55] mt-1 shrink-0" />
-                <p className="text-[#E2BE69] leading-7">
-                  Your package is looking wonderful. Please review the details
-                  below. Once confirmed, you will instantly receive your
-                  itinerary in PDF format.
+            <p className="text-[#E2BE69] leading-7">
+                  Review this demo estimate. It is not a live quote or reservation.
+                  No confirmation email or PDF is created by this preview.
                 </p>
               </div>
 
@@ -728,7 +726,7 @@ export default function BespokePackage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-6 pb-8">
                   <div className="flex items-center justify-between">
                     <span className="uppercase tracking-[0.3em] text-[11px] text-[#757575]">
-                      St Patrick's
+                      St Patrick&apos;s
                     </span>
                     <span className="text-white">
                       {stPatricksRounds} Round(s)
@@ -776,6 +774,16 @@ export default function BespokePackage() {
 
           {/* Footer */}
 
+          {currentStep === 4 && (
+            <div className="mt-8 border border-[#5d4a20] p-5 text-[#E2BE69] space-y-2" aria-label="Demo price breakdown">
+              <p>Demo rooms: {euro(pricing.roomCost)}</p>
+              <p>Demo golf estimate: {euro(pricing.golfCost)}</p>
+              <p>Demo total: {euro(pricing.total)}</p>
+              <p>Non-refundable deposit ({demoBookingRules.payment.depositPercent}%): {euro(pricing.deposit)}</p>
+              <p>Balance ({demoBookingRules.payment.balancePercent}%): {euro(pricing.balance)}, due {demoBookingRules.payment.balanceDueWeeksBeforeArrival} weeks before arrival.</p>
+            </div>
+          )}
+
           <div className="border-t border-[#171717] mt-10 pt-10 flex flex-col sm:flex-row justify-between items-center gap-6">
             <button
               onClick={prevStep}
@@ -790,7 +798,7 @@ export default function BespokePackage() {
             {currentStep < steps.length - 1 ? (
               <button
                 onClick={nextStep}
-                disabled={currentStep === 3 && !hasEnoughRounds}
+                disabled={(currentStep === 0 && !hasValidArrival) || (currentStep === 3 && !hasEnoughRounds)}
                 className={`transition-all px-10 h-12 min-w-42.5 uppercase tracking-[0.35em] text-[11px] font-semibold flex items-center justify-center gap-3
                   ${
                     currentStep === 3 && !hasEnoughRounds
@@ -804,17 +812,10 @@ export default function BespokePackage() {
             ) : (
               <button
                 onClick={handleBook}
-                disabled={isSubmitting}
+                disabled={!hasEnoughRounds || !hasValidArrival}
                 className="bg-[#D4AF55] hover:bg-[#c7a042] disabled:bg-[#444] disabled:text-[#888] transition-all px-10 h-12 min-w-42.5 uppercase tracking-[0.2em] text-[11px] font-semibold text-black flex items-center justify-center gap-3"
               >
-                {isSubmitting ? (
-                  "Processing..."
-                ) : (
-                  <>
-                    <Send size={15} className="mr-1" />
-                    Confirm & Pay Deposit
-                  </>
-                )}
+                Preview Demo Package
               </button>
             )}
           </div>

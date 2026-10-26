@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchTeesheet } from "@/lib/brsGolfClient";
+import { bookingBackend, bookingError } from "@/lib/bookingBackend";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");
   const courseId = searchParams.get("course_id");
 
-  if (!date || !courseId) {
-    return NextResponse.json({ error: "date and course_id are required" }, { status: 400 });
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !courseId || !["1", "3"].includes(courseId)) {
+    return NextResponse.json({ error: "A valid date and supported course are required." }, { status: 400 });
   }
 
   try {
-    const data = await fetchTeesheet(date, parseInt(courseId, 10));
-    return NextResponse.json(data);
+    const data = await bookingBackend(`/teesheets?date=${date}&course_id=${courseId}`);
+    return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    console.error(err);
+    const { error, status } = bookingError(err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown error" },
-      { status: 502 }
+      { error }, { status }
     );
   }
 }

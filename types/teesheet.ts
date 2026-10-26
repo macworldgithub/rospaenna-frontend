@@ -37,7 +37,14 @@ export interface TeesheetData {
   sunrise: string;
   sunset: string;
   currency_code: string;
-  messages: string[];
+  messages: { start_date: string; end_date: string; time: string; message: string }[];
+}
+
+export interface TeesheetCacheInfo {
+  fetched_at: string;
+  stale: boolean;
+  window_start: string;
+  window_end: string;
 }
 
 export interface Course {
@@ -50,11 +57,11 @@ export interface Course {
 
 export const COURSES: Record<string, Course> = {
   "old-tom-morris": {
-    id: 1, // ⚠️ unverified — confirm the real course_id for Old Tom Morris Links
-    facilities_id: 5896,
+    id: 1,
+    facilities_id: 5797,
     name: "Old Tom Morris Links",
     playing_time: "",
-    colour: "1",
+    colour: "",
   },
   "sandy-hills": {
     id: 3,
@@ -66,10 +73,12 @@ export const COURSES: Record<string, Course> = {
 };
 
 export interface PendingBooking {
+  bookingIntentKey: string;
   teeTime: TeeTime;
   greenFee: GreenFee;
   course: Course;
   date: string;
   price: string;
   players: number;
+  currency: string;
 }

@@ -1,0 +1,55 @@
+{
+  "version": "demo-2026-10-14-v1",
+  "mode": "demo",
+  "productionApproved": false,
+  "source": "knowledge-vault/raw/Rosapenna-Updated-Build-and-Manage-My-Booking-Scope-v1.1.md",
+  "roomInventory": { "total": 70, "bookableCap": 65, "categoryBuffers": null, "source": "demo" },
+  "minimumRounds": [
+    { "minimumNights": 2, "maximumNights": 3, "rounds": 2 },
+    { "minimumNights": 4, "maximumNights": 5, "rounds": 3 }
+  ],
+  "unsupportedStays": "staff_review",
+  "golfIrelandEligibility": { "irishResidenceRequired": true, "playInIrelandRequired": true, "evidenceNeedsReview": true },
+  "payment": {
+    "depositPercent": 25,
+    "depositRefundable": false,
+    "balancePercent": 75,
+    "balanceDueWeeksBeforeArrival": 6,
+    "firstBalanceRequestWeeksBeforeArrival": 6,
+    "firstRequestNeedsReview": true,
+    "unpaidLinkReminderDay": 5,
+    "unpaidLinkExpiryDays": 7,
+    "lateBookings": "staff_review",
+    "reserveInventoryBeforePayment": false,
+    "autoCancelConfirmedBooking": false,
+    "leadPayers": 1
+  },
+  "amendments": {
+    "handling": "staff_request",
+    "cutoffDays": null,
+    "fee": null,
+    "repricingPolicy": null,
+    "creditPolicy": null,
+    "refundPolicy": null,
+    "automaticRefunds": false,
+    "automaticCancellations": false
+  },
+  "operations": {
+    "roomingAndCaddyMessageWeeksBeforeArrival": 6,
+    "physicalRoomAllocationDaysBeforeArrival": 2,
+    "caddiesRequestOnly": true,
+    "caddiesPayableOnDay": true,
+    "lateBookingCommunication": "staff_review"
+  },
+  "followingYearOpening": { "month": 2, "day": 1, "needsReview": true },
+  "excluded": ["dinner", "promoted_buggy_booking", "split_group_payments", "check_in", "POS", "post_stay_campaigns"],
+  "reviewBeforeProduction": [
+    "Room rates, occupancy, room-category buffers and dated closures",
+    "Longer stays, late arrival and early departure rules",
+    "Eligibility wording and evidence",
+    "First balance request: scope leaves eight versus six weeks open; demo uses six",
+    "Late-booking payments and communications",
+    "Amendment cutoffs, fees, repricing, credits, refunds and cancellation policy",
+    "Following-year opening date and staff configuration permissions"
+  ]
+}

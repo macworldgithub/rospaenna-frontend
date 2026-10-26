@@ -1,378 +1,9 @@
-// "use client";
-
-// import { Suspense, useState, useEffect } from "react";
-// import { useSearchParams, useRouter } from "next/navigation";
-// import Sidebar from "@/components/Sidebar";
-// import { X } from "lucide-react";
-
-// const inputClass = "w-full bg-[#111111] border border-[#DBB155]/20 text-white p-2.5 rounded-sm outline-none focus:ring-1 focus:ring-[#DBB155] placeholder-gray-600 text-sm";
-// const selectClass = "w-full bg-[#111111] border border-[#DBB155]/20 text-white p-2.5 rounded-sm outline-none focus:ring-1 focus:ring-[#DBB155] text-sm appearance-none cursor-pointer";
-// const labelClass = "text-xs font-semibold text-gray-400";
-// const requiredClass = "text-[#DBB155]";
-
-// function BookingForm() {
-//   const searchParams = useSearchParams();
-//   const playersStr = searchParams.get("players");
-//   const priceStr = searchParams.get("price");
-
-//   const players = playersStr ? parseInt(playersStr, 10) : 2;
-//   const price = priceStr ? `€${priceStr}.00` : "€180.00";
-//   const router = useRouter();
-
-//   const [timeLeft, setTimeLeft] = useState(5 * 60); // 5 minutes
-//   const [showModal, setShowModal] = useState(false);
-
-//   useEffect(() => {
-//     if (timeLeft <= 0) {
-//       setShowModal(true);
-//       return;
-//     }
-//     const interval = setInterval(() => {
-//       setTimeLeft((prev) => prev - 1);
-//     }, 1000);
-//     return () => clearInterval(interval);
-//   }, [timeLeft]);
-
-//   const minutes = Math.floor(timeLeft / 60);
-//   const seconds = timeLeft % 60;
-
-//   const termsCheckbox = (
-//     <div className={`mt-8 ${players === 1 ? 'mb-4' : ''}`}>
-//       <label className="flex items-start gap-3 cursor-pointer">
-//         <input type="checkbox" className="w-4 h-4 mt-0.5 border-gray-600 rounded accent-[#DBB155]" />
-//         <span className="text-[11px] text-gray-400 font-bold leading-tight">
-//           I have read and I accept the <a href="#" className="text-[#DBB155] hover:underline">Privacy Policy</a> and Visitor <a href="#" className="text-[#DBB155] hover:underline">Terms and Conditions</a>
-//         </span>
-//       </label>
-//     </div>
-//   );
-
-//   return (
-//     <div className="flex-1 flex flex-col gap-10">
-
-//       {/* Timer Alert */}
-//       <div className="text-center text-[#d9534f] font-medium text-sm">
-//         You have {minutes} minute{minutes !== 1 ? 's' : ''} and {seconds} second{seconds !== 1 ? 's' : ''} to complete your booking
-//       </div>
-
-//       {/* Booking Expired Modal */}
-//       {showModal && (
-//         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80">
-//           <div className="bg-[#0a0a0a] border border-[#DBB155]/20 rounded-lg shadow-2xl max-w-md w-full mx-4 p-8 text-center relative">
-//             {/* Close X icon */}
-//             <div className="flex justify-center mb-4">
-//               <div className="w-16 h-16 rounded-full border-[3px] border-[#d9534f] flex items-center justify-center">
-//                 <X className="w-10 h-10 text-[#d9534f]" strokeWidth={2.5} />
-//               </div>
-//             </div>
-
-//             <h2 className="text-2xl font-bold text-white mb-4">Booking Expired</h2>
-
-//             <p className="text-gray-400 text-sm leading-relaxed mb-3">
-//               The time available to confirm this booking has now expired. When you click OK, you will be returned the Booking Details screen and if the slot you wish to book is still available, the timer will restart and you will be able to attempt to complete your booking again.
-//             </p>
-
-//             <p className="text-[#d9534f] text-sm leading-relaxed mb-6">
-//               If the time slot is no longer available, you will be informed and returned to the book tee times screen to select another time.
-//             </p>
-
-//             <button
-//               onClick={() => router.push('/')}
-//               className="bg-[#DBB155] hover:bg-[#c9a04a] transition-colors text-black font-bold text-sm px-10 py-2.5 rounded-[3px]"
-//             >
-//               OK
-//             </button>
-//           </div>
-//         </div>
-//       )}
-
-//       <div className="flex flex-col gap-8">
-//         <h2 className="text-[#DBB155] font-bold tracking-wide uppercase">Personal Information</h2>
-
-//         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-
-//           {/* Your Details (Player 1) */}
-//           <div className="flex flex-col gap-4">
-//             <h3 className="text-[#DBB155]/70 font-bold text-xs tracking-wide uppercase mb-2">Your Details</h3>
-
-//             <div className="flex flex-col gap-1">
-//               <label className={labelClass}>First Name<span className={requiredClass}>*</span></label>
-//               <input type="text" className={inputClass} />
-//             </div>
-
-//             <div className="flex flex-col gap-1">
-//               <label className={labelClass}>Last Name<span className={requiredClass}>*</span></label>
-//               <input type="text" className={inputClass} />
-//             </div>
-
-//             <div className="flex flex-col gap-1">
-//               <label className={labelClass}>Country<span className={requiredClass}>*</span></label>
-//               <select className={selectClass}>
-//                 <option value="">Select one</option>
-//                 <option value="Argentina">Argentina</option>
-//                 <option value="Austria">Austria</option>
-//                 <option value="Bahrain">Bahrain</option>
-//                 <option value="Barbados">Barbados</option>
-//                 <option value="Belgium">Belgium</option>
-//                 <option value="Canada">Canada</option>
-//                 <option value="China">China</option>
-//                 <option value="Denmark">Denmark</option>
-//                 <option value="England">England</option>
-//                 <option value="Finland">Finland</option>
-//                 <option value="France">France</option>
-//                 <option value="Germany">Germany</option>
-//                 <option value="Iceland">Iceland</option>
-//                 <option value="India">India</option>
-//               </select>
-//             </div>
-
-//             <div className="flex flex-col gap-1">
-//               <label className={labelClass}>Email<span className={requiredClass}>*</span></label>
-//               <input type="email" className={inputClass} />
-//             </div>
-
-//             <div className="flex flex-col gap-1">
-//               <label className={labelClass}>Telephone<span className={requiredClass}>*</span></label>
-//               <input type="tel" className={inputClass} />
-//             </div>
-
-//             <div className="flex flex-col gap-1">
-//               <label className={labelClass}>Mobile</label>
-//               <input type="tel" className={inputClass} />
-//             </div>
-
-//             <div className="flex flex-col gap-1">
-//               <label className={labelClass}>Handicap<span className={requiredClass}>*</span></label>
-//               <input type="text" className={inputClass} />
-//             </div>
-
-//             <div className="flex flex-col gap-1">
-//               <label className={labelClass}>Club<span className={requiredClass}>*</span></label>
-//               <input type="text" className={inputClass} />
-//             </div>
-
-//             <div className="flex flex-col gap-1">
-//               <label className={labelClass}>CDH Number</label>
-//               <input type="text" className={inputClass} />
-//             </div>
-
-//             <div className="flex flex-col gap-1 mt-2">
-//               <label className={labelClass}>Please provide details of any special requirements</label>
-//               <textarea rows={4} className={`${inputClass} resize-none`}></textarea>
-//             </div>
-
-//             <div className="mt-4 flex flex-col gap-3">
-//               <p className="text-[11px] font-bold text-gray-400">
-//                 I agree to receive information, newsletters, promotions and offers from Rosapenna Golf Resort.
-//               </p>
-//               <div className="flex flex-wrap gap-4">
-//                 <label className="flex items-center gap-2 cursor-pointer">
-//                   <input type="checkbox" className="w-4 h-4 border-gray-600 rounded accent-[#DBB155]" />
-//                   <span className="text-[11px] text-gray-400 font-bold">Email</span>
-//                 </label>
-//                 <label className="flex items-center gap-2 cursor-pointer">
-//                   <input type="checkbox" className="w-4 h-4 border-gray-600 rounded accent-[#DBB155]" />
-//                   <span className="text-[11px] text-gray-400 font-bold">SMS</span>
-//                 </label>
-//                 <label className="flex items-center gap-2 cursor-pointer">
-//                   <input type="checkbox" className="w-4 h-4 border-gray-600 rounded accent-[#DBB155]" />
-//                   <span className="text-[11px] text-gray-400 font-bold">Post</span>
-//                 </label>
-//                 <label className="flex items-center gap-2 cursor-pointer">
-//                   <input type="checkbox" className="w-4 h-4 border-gray-600 rounded accent-[#DBB155]" />
-//                   <span className="text-[11px] text-gray-400 font-bold">Telephone</span>
-//                 </label>
-//               </div>
-//             </div>
-//           </div>
-
-//           {/* Right Column in Form (Other Players & Terms) */}
-//           <div className="flex flex-col gap-10">
-//             {players >= 2 && (
-//               <div className="flex flex-col gap-4">
-//                 <h3 className="text-[#DBB155]/70 font-bold text-xs tracking-wide uppercase mb-2">Player Two Details</h3>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>Name<span className={requiredClass}>*</span></label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>Handicap<span className={requiredClass}>*</span></label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>Club<span className={requiredClass}>*</span></label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>CDH Number</label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-//               </div>
-//             )}
-
-//             {players >= 3 && (
-//               <div className="flex flex-col gap-4">
-//                 <h3 className="text-[#DBB155]/70 font-bold text-xs tracking-wide uppercase mb-2">Player Three Details</h3>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>Name<span className={requiredClass}>*</span></label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>Handicap<span className={requiredClass}>*</span></label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>Club<span className={requiredClass}>*</span></label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>CDH Number</label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-//               </div>
-//             )}
-
-//             {players >= 4 && (
-//               <div className="flex flex-col gap-4">
-//                 <h3 className="text-[#DBB155]/70 font-bold text-xs tracking-wide uppercase mb-2">Player Four Details</h3>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>Name<span className={requiredClass}>*</span></label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>Handicap<span className={requiredClass}>*</span></label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>Club<span className={requiredClass}>*</span></label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-
-//                 <div className="flex flex-col gap-1">
-//                   <label className={labelClass}>CDH Number</label>
-//                   <input type="text" className={inputClass} />
-//                 </div>
-//               </div>
-//             )}
-
-//             {players > 1 && termsCheckbox}
-//           </div>
-
-//         </div>
-//       </div>
-
-//       <div className="h-px bg-[#DBB155]/20 w-full my-2"></div>
-
-//       {/* Booking Details */}
-//       <div className="flex flex-col gap-6">
-//         <h2 className="text-[#DBB155] font-bold tracking-wide uppercase">Booking Details</h2>
-
-//         <div className="flex flex-col text-[13px]">
-//           <div className="flex flex-col sm:flex-row">
-//             <div className="w-full sm:w-[200px] bg-[#111111] p-3 font-semibold text-gray-300 border-b border-[#DBB155]/10">Booking Type</div>
-//             <div className="flex-1 p-3 text-gray-400 border-b border-[#DBB155]/5">Golf Package</div>
-//           </div>
-//           <div className="flex flex-col sm:flex-row">
-//             <div className="w-full sm:w-[200px] bg-[#111111] p-3 font-semibold text-gray-300 border-b border-[#DBB155]/10">Total Booking Fee</div>
-//             <div className="flex-1 p-3 text-gray-400 border-b border-[#DBB155]/5">{price}</div>
-//           </div>
-//           <div className="flex flex-col sm:flex-row">
-//             <div className="w-full sm:w-[200px] bg-[#111111] p-3 font-semibold text-gray-300 border-b border-[#DBB155]/10">Booking Date/Time</div>
-//             <div className="flex-1 p-3 text-gray-400 border-b border-[#DBB155]/5">07:30 Tuesday 16th June 2026</div>
-//           </div>
-//           <div className="flex flex-col sm:flex-row">
-//             <div className="w-full sm:w-[200px] bg-[#111111] p-3 font-semibold text-gray-300 border-b border-[#DBB155]/10">Course</div>
-//             <div className="flex-1 p-3 text-gray-400 border-b border-[#DBB155]/5">Old Tom Morris Links</div>
-//           </div>
-//           <div className="flex flex-col sm:flex-row">
-//             <div className="w-full sm:w-[200px] bg-[#111111] p-3 font-semibold text-gray-300 border-b border-[#DBB155]/10">Holes</div>
-//             <div className="flex-1 p-3 text-gray-400 border-b border-[#DBB155]/5">18</div>
-//           </div>
-//           <div className="flex flex-col sm:flex-row">
-//             <div className="w-full sm:w-[200px] bg-[#111111] p-3 font-semibold text-gray-300 border-b border-[#DBB155]/10">Number of Players</div>
-//             <div className="flex-1 p-3 text-gray-400 border-b border-[#DBB155]/5">{players}</div>
-//           </div>
-//         </div>
-//       </div>
-
-//       {players === 1 && termsCheckbox}
-
-//       <div className="h-px bg-[#DBB155]/20 w-full my-2"></div>
-
-//       {/* Payment */}
-//       <div className="flex flex-col gap-6">
-//         <h2 className="text-[#DBB155] font-bold tracking-wide uppercase">Payment</h2>
-
-//         <div className="max-w-[400px]">
-//           <div className="relative border border-[#DBB155]/20 rounded-[3px] flex items-center p-3 bg-[#111111]">
-//             <div className="flex items-center gap-3 flex-1">
-//               {/* Card Icon */}
-//               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-500">
-//                 <rect x="2" y="5" width="20" height="14" rx="2" fill="currentColor" />
-//                 <rect x="2" y="9" width="20" height="3" fill="#000000" fillOpacity="0.4" />
-//               </svg>
-//               <input type="text" placeholder="Card number" className="w-full outline-none text-sm placeholder-gray-600 bg-transparent text-white" />
-//             </div>
-//             <button className="bg-[#DBB155] hover:bg-[#c9a04a] text-black text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors">
-//               Autofill
-//               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-//                 <path d="M5 12h14M12 5l7 7-7 7" />
-//               </svg>
-//             </button>
-//           </div>
-//         </div>
-
-//         <div className="flex flex-col-reverse sm:flex-row justify-start items-center gap-4 mt-6 mb-12">
-//           <button
-//             onClick={() => router.push('/tee-times')}
-//             className="w-full sm:w-auto px-8 sm:px-12 py-3 border border-[#d9534f] text-[#d9534f] hover:bg-[#d9534f] hover:text-white transition-colors font-bold text-xs tracking-widest uppercase rounded-[3px]"
-//           >
-//             Cancel
-//           </button>
-//           <button className="w-full sm:w-auto px-8 sm:px-24 py-3 bg-[#DBB155] hover:bg-[#c9a04a] transition-colors text-black font-bold text-xs tracking-widest uppercase rounded-[3px]">
-//             Pay
-//           </button>
-//         </div>
-//       </div>
-
-//     </div>
-//   );
-// }
-
-// export default function Booking() {
-//   return (
-//     <div className="max-w-[1400px] mx-auto px-6 py-8">
-//       <div className="flex flex-col lg:flex-row gap-6">
-
-//         <Suspense fallback={<div className="flex-1 flex justify-center py-20 text-gray-400">Loading...</div>}>
-//           <BookingForm />
-//         </Suspense>
-
-//         {/* Right Column - Info */}
-//         <Sidebar />
-
-//       </div>
-//     </div>
-//   );
-// }
-
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
-import { X } from "lucide-react";
 import { PendingBooking } from "@/types/teesheet";
 
 const inputClass = "w-full bg-[#111111] border border-[#DBB155]/20 text-white p-2.5 rounded-sm outline-none focus:ring-1 focus:ring-[#DBB155] placeholder-gray-600 text-sm";
@@ -397,18 +28,77 @@ const emptyPlayer = (): PlayerForm => ({
   telephone: "", mobile: "", handicap: "", club: "", cdh: "",
 });
 
-function BookingForm() {
-  const searchParams = useSearchParams();
-  const playersStr = searchParams.get("players");
-  const priceStr = searchParams.get("price");
+interface BookingIntentStatus {
+  id: string;
+  stage: string;
+  paymentState: string;
+  reservationState: string;
+  retryable: boolean;
+}
 
-  const players = playersStr ? parseInt(playersStr, 10) : 2;
-  const price = priceStr ? `€${priceStr}.00` : "€180.00";
+function readBookingIntentStatus(value: unknown): BookingIntentStatus | null {
+  if (!value || typeof value !== "object") return null;
+  const data = value as Record<string, unknown>;
+  if (typeof data.bookingIntentStage !== "string") return null;
+
+  return {
+    id: typeof data.bookingIntentId === "string" ? data.bookingIntentId : "",
+    stage: data.bookingIntentStage,
+    paymentState: typeof data.paymentState === "string" ? data.paymentState : "unavailable",
+    reservationState: typeof data.reservationState === "string" ? data.reservationState : "unavailable",
+    retryable: data.bookingIntentRetryable === true,
+  };
+}
+
+function checkoutStageText(status: BookingIntentStatus) {
+  const messages: Record<string, string> = {
+    draft: "Request saved. The live price has not been checked.",
+    quote_revalidation_failed: "The live price or availability changed. Choose a tee time again.",
+    quote_revalidation_unavailable: "The live price could not be checked. Try again later.",
+    quote_revalidated: "The live price was checked. Checkout has not started.",
+    checkout_preparation_pending: "The checkout request is waiting for a BRS response.",
+    checkout_preparation_response_received: "BRS returned a checkout response. This is not a confirmed reservation.",
+    checkout_preparation_failed: "BRS could not prepare checkout.",
+    checkout_preparation_blocked: "The site could not start checkout. Wait or contact Reservations.",
+    recovery_required: "The final result is unclear. Contact Reservations before you try again.",
+    payment_pending: status.paymentState === "pending" ? "Payment is waiting for the payment provider." : "Payment is not confirmed as pending.",
+    payment_verified: status.paymentState === "verified" ? "The payment provider verified payment." : "Payment is not verified.",
+    vendor_write_pending: status.reservationState === "vendor_write_pending" ? "The reservation update is waiting for the booking system." : "The reservation update status is not available.",
+    confirmed: status.reservationState === "confirmed" ? "The reservation system confirmed this booking." : "The reservation is not confirmed. Contact Reservations.",
+    action_required: "This request needs action from Reservations.",
+  };
+  return messages[status.stage] || "The booking status is not available. Contact Reservations before you try again.";
+}
+
+function paymentStatusText(state: string) {
+  const messages: Record<string, string> = {
+    not_started: "Not started",
+    pending: "Pending",
+    verified: "Verified",
+    failed: "Not completed",
+  };
+  return messages[state] || "Not available";
+}
+
+function reservationStatusText(state: string) {
+  const messages: Record<string, string> = {
+    not_confirmed: "Not confirmed",
+    pending: "Pending",
+    vendor_write_pending: "Waiting for the reservation system",
+    confirmed: "Confirmed by the reservation system",
+    action_required: "Action needed from Reservations",
+  };
+  return messages[state] || "Not available";
+}
+
+function BookingForm() {
   const router = useRouter();
 
-  const [timeLeft, setTimeLeft] = useState(5 * 60);
-  const [showModal, setShowModal] = useState(false);
   const [booking, setBooking] = useState<PendingBooking | null>(null);
+  const players = booking?.players ?? 1;
+  const price = booking ? new Intl.NumberFormat("en-IE", {
+    style: "currency", currency: booking.currency,
+  }).format(Number(booking.price)) : "—";
 
   const [player1, setPlayer1] = useState<PlayerForm>(emptyPlayer());
   const [otherPlayers, setOtherPlayers] = useState<PlayerForm[]>(
@@ -416,32 +106,28 @@ function BookingForm() {
   );
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [marketing, setMarketing] = useState({ email: false, sms: false, post: false, telephone: false });
-  const [cardNumber, setCardNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [bookingIntentStatus, setBookingIntentStatus] = useState<BookingIntentStatus | null>(null);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("pendingBooking");
     if (raw) {
       try {
-        setBooking(JSON.parse(raw) as PendingBooking);
+        const saved = JSON.parse(raw) as PendingBooking;
+        if (!saved.currency || !/^[A-Z]{3}$/.test(saved.currency) ||
+            !Number.isInteger(saved.players) || saved.players < 1 || saved.players > 4 ||
+            !Number.isFinite(Number(saved.price))) throw new Error("Invalid saved booking");
+        // Restore browser session state after hydration.
+        const restored = { ...saved, bookingIntentKey: saved.bookingIntentKey || crypto.randomUUID() };
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setBooking(restored);
+        sessionStorage.setItem("pendingBooking", JSON.stringify(restored));
       } catch {
         setBooking(null);
       }
     }
   }, []);
-
-  useEffect(() => {
-    if (timeLeft <= 0) {
-      setShowModal(true);
-      return;
-    }
-    const interval = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-    return () => clearInterval(interval);
-  }, [timeLeft]);
-
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
 
   const updateOtherPlayer = (idx: number, field: keyof PlayerForm, value: string) => {
     setOtherPlayers((prev) => {
@@ -451,12 +137,12 @@ function BookingForm() {
     });
   };
 
-  const handlePay = async () => {
+  const handlePrepareCheckout = async () => {
     if (!booking) {
       setSubmitError("Booking session expired — please select a tee time again.");
       return;
     }
-    if (players > 1 && !acceptedTerms) {
+    if (!acceptedTerms) {
       setSubmitError("Please accept the terms and conditions.");
       return;
     }
@@ -510,7 +196,7 @@ function BookingForm() {
     }
 
     const payload = {
-      marketing: { terms: acceptedTerms || players === 1, ...marketing },
+      marketing: { terms: acceptedTerms, ...marketing },
       teeTime: {
         ...booking.teeTime,
         element_id: `package-${booking.greenFee.id}-${booking.date.replace(/-/g, "")}${booking.teeTime.time.replace(":", "")}`,
@@ -526,6 +212,7 @@ function BookingForm() {
       date: booking.date,
       bookingType: "Package",
       price: booking.price,
+      currency: booking.currency,
       holes: booking.teeTime.holes || "18",
       greenFee: booking.greenFee,
       openCompetition: {},
@@ -537,16 +224,22 @@ function BookingForm() {
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": booking.bookingIntentKey,
+          "X-Checkout-Attempt-Key": crypto.randomUUID(),
+        },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Booking failed");
-
-      sessionStorage.removeItem("pendingBooking");
-      // TODO: route to a confirmation page once you know the checkout API's success shape
-      alert("Booking submitted successfully!");
-      router.push("/");
+      const data: unknown = await res.json().catch(() => null);
+      const savedStatus = readBookingIntentStatus(data);
+      if (savedStatus) setBookingIntentStatus(savedStatus);
+      const errorMessage = data && typeof data === "object" && "error" in data &&
+        typeof data.error === "string" ? data.error : "Booking failed";
+      if (!res.ok) throw new Error(errorMessage);
+      if (!savedStatus) {
+        throw new Error("The saved booking status was not returned. Contact Reservations before you try again.");
+      }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Booking failed");
     } finally {
@@ -559,6 +252,7 @@ function BookingForm() {
       <label className="flex items-start gap-3 cursor-pointer">
         <input
           type="checkbox"
+          required
           checked={acceptedTerms}
           onChange={(e) => setAcceptedTerms(e.target.checked)}
           className="w-4 h-4 mt-0.5 border-gray-600 rounded accent-[#DBB155]"
@@ -577,34 +271,27 @@ function BookingForm() {
     : "—";
 
   return (
-    <div className="flex-1 flex flex-col gap-10">
+    <form className="flex-1 flex flex-col gap-10" onSubmit={(event) => {
+      event.preventDefault();
+      void handlePrepareCheckout();
+    }}>
 
-      <div className="text-center text-[#d9534f] font-medium text-sm">
-        You have {minutes} minute{minutes !== 1 ? 's' : ''} and {seconds} second{seconds !== 1 ? 's' : ''} to complete your booking
+      <div role="status" aria-live="polite" className="text-center text-gray-300 text-sm border border-[#DBB155]/20 p-4">
+        <p>{!booking ? "Tee time: not selected." : bookingIntentStatus?.reservationState === "confirmed" ? "Tee time: confirmed by the reservation system." : "Tee time: selected, not confirmed."}</p>
+        <p className="mt-2 text-gray-400">Checkout: {bookingIntentStatus ? checkoutStageText(bookingIntentStatus) : "not requested."}</p>
+        <p className="mt-2 text-gray-400">Payment: {bookingIntentStatus ? paymentStatusText(bookingIntentStatus.paymentState) : "not started."} Reservation: {bookingIntentStatus ? reservationStatusText(bookingIntentStatus.reservationState) : "not confirmed."}</p>
+        <p className="mt-2 text-gray-400">Confirmation email and PDF: unavailable.</p>
+        <p className="mt-2 text-gray-400">Continuing checks the current BRS price and availability, then requests checkout preparation. This demo has no secure payment provider or verified reservation status.</p>
+        {!booking && <Link href="/tee-times" className="mt-3 inline-block text-[#DBB155] underline">Choose a tee time</Link>}
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80">
-          <div className="bg-[#0a0a0a] border border-[#DBB155]/20 rounded-lg shadow-2xl max-w-md w-full mx-4 p-8 text-center relative">
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 rounded-full border-[3px] border-[#d9534f] flex items-center justify-center">
-                <X className="w-10 h-10 text-[#d9534f]" strokeWidth={2.5} />
-              </div>
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-4">Booking Expired</h2>
-            <p className="text-gray-400 text-sm leading-relaxed mb-3">
-              The time available to confirm this booking has now expired. When you click OK, you will be returned the Booking Details screen and if the slot you wish to book is still available, the timer will restart and you will be able to attempt to complete your booking again.
-            </p>
-            <p className="text-[#d9534f] text-sm leading-relaxed mb-6">
-              If the time slot is no longer available, you will be informed and returned to the book tee times screen to select another time.
-            </p>
-            <button
-              onClick={() => router.push('/')}
-              className="bg-[#DBB155] hover:bg-[#c9a04a] transition-colors text-black font-bold text-sm px-10 py-2.5 rounded-[3px]"
-            >
-              OK
-            </button>
-          </div>
+      {bookingIntentStatus && (
+        <div role="status" aria-live="polite" className="border border-[#DBB155]/30 bg-[#111] p-5 text-gray-200">
+          <h2 className="font-semibold text-[#DBB155]">Latest status from the booking service</h2>
+          <p className="mt-2 text-sm leading-6">{checkoutStageText(bookingIntentStatus)}</p>
+          <p className="mt-2 text-sm">Payment: {paymentStatusText(bookingIntentStatus.paymentState)}. Reservation: {reservationStatusText(bookingIntentStatus.reservationState)}. Confirmation email and PDF: unavailable.</p>
+          {bookingIntentStatus.id && <p className="mt-2 text-sm">Request reference: {bookingIntentStatus.id}</p>}
+          <p className="mt-3 text-sm">For help, contact Hotel Reservations at <a className="text-[#DBB155] underline" href="mailto:reservations@rosapenna.ie">reservations@rosapenna.ie</a> or +353 (0)74 91 55301.</p>
         </div>
       )}
 
@@ -617,20 +304,20 @@ function BookingForm() {
             <h3 className="text-[#DBB155]/70 font-bold text-xs tracking-wide uppercase mb-2">Your Details</h3>
 
             <div className="flex flex-col gap-1">
-              <label className={labelClass}>First Name<span className={requiredClass}>*</span></label>
-              <input type="text" className={inputClass} value={player1.firstName}
+              <label htmlFor="guest-first-name" className={labelClass}>First Name<span className={requiredClass}>*</span></label>
+              <input id="guest-first-name" type="text" required maxLength={100} className={inputClass} value={player1.firstName}
                 onChange={(e) => setPlayer1({ ...player1, firstName: e.target.value })} />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className={labelClass}>Last Name<span className={requiredClass}>*</span></label>
-              <input type="text" className={inputClass} value={player1.lastName}
+              <label htmlFor="guest-last-name" className={labelClass}>Last Name<span className={requiredClass}>*</span></label>
+              <input id="guest-last-name" type="text" required maxLength={100} className={inputClass} value={player1.lastName}
                 onChange={(e) => setPlayer1({ ...player1, lastName: e.target.value })} />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className={labelClass}>Country<span className={requiredClass}>*</span></label>
-              <select className={selectClass} value={player1.country}
+              <label htmlFor="guest-country" className={labelClass}>Country<span className={requiredClass}>*</span></label>
+              <select id="guest-country" required className={selectClass} value={player1.country}
                 onChange={(e) => setPlayer1({ ...player1, country: e.target.value })}>
                 <option value="">Select one</option>
                 <option value="Argentina">Argentina</option>
@@ -651,14 +338,14 @@ function BookingForm() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className={labelClass}>Email<span className={requiredClass}>*</span></label>
-              <input type="email" className={inputClass} value={player1.email}
+              <label htmlFor="guest-email" className={labelClass}>Email<span className={requiredClass}>*</span></label>
+              <input id="guest-email" type="email" required maxLength={254} className={inputClass} value={player1.email}
                 onChange={(e) => setPlayer1({ ...player1, email: e.target.value })} />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className={labelClass}>Telephone<span className={requiredClass}>*</span></label>
-              <input type="tel" className={inputClass} value={player1.telephone}
+              <label htmlFor="guest-telephone" className={labelClass}>Telephone<span className={requiredClass}>*</span></label>
+              <input id="guest-telephone" type="tel" required maxLength={40} className={inputClass} value={player1.telephone}
                 onChange={(e) => setPlayer1({ ...player1, telephone: e.target.value })} />
             </div>
 
@@ -669,14 +356,14 @@ function BookingForm() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className={labelClass}>Handicap<span className={requiredClass}>*</span></label>
-              <input type="text" className={inputClass} value={player1.handicap}
+              <label htmlFor="guest-handicap" className={labelClass}>Handicap<span className={requiredClass}>*</span></label>
+              <input id="guest-handicap" type="text" required maxLength={16} className={inputClass} value={player1.handicap}
                 onChange={(e) => setPlayer1({ ...player1, handicap: e.target.value })} />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className={labelClass}>Club<span className={requiredClass}>*</span></label>
-              <input type="text" className={inputClass} value={player1.club}
+              <label htmlFor="guest-club" className={labelClass}>Club<span className={requiredClass}>*</span></label>
+              <input id="guest-club" type="text" required maxLength={160} className={inputClass} value={player1.club}
                 onChange={(e) => setPlayer1({ ...player1, club: e.target.value })} />
             </div>
 
@@ -722,6 +409,7 @@ function BookingForm() {
                   <div className="flex flex-col gap-1">
                     <label className={labelClass}>Name<span className={requiredClass}>*</span></label>
                     <input type="text" className={inputClass}
+                      required maxLength={100}
                       value={otherPlayers[num - 2].firstName}
                       onChange={(e) => updateOtherPlayer(num - 2, "firstName", e.target.value)} />
                   </div>
@@ -729,6 +417,7 @@ function BookingForm() {
                   <div className="flex flex-col gap-1">
                     <label className={labelClass}>Handicap<span className={requiredClass}>*</span></label>
                     <input type="text" className={inputClass}
+                      required maxLength={16}
                       value={otherPlayers[num - 2].handicap}
                       onChange={(e) => updateOtherPlayer(num - 2, "handicap", e.target.value)} />
                   </div>
@@ -736,6 +425,7 @@ function BookingForm() {
                   <div className="flex flex-col gap-1">
                     <label className={labelClass}>Club<span className={requiredClass}>*</span></label>
                     <input type="text" className={inputClass}
+                      required maxLength={160}
                       value={otherPlayers[num - 2].club}
                       onChange={(e) => updateOtherPlayer(num - 2, "club", e.target.value)} />
                   </div>
@@ -768,7 +458,7 @@ function BookingForm() {
             <div className="flex-1 p-3 text-gray-400 border-b border-[#DBB155]/5">Golf Package</div>
           </div>
           <div className="flex flex-col sm:flex-row">
-            <div className="w-full sm:w-[200px] bg-[#111111] p-3 font-semibold text-gray-300 border-b border-[#DBB155]/10">Total Booking Fee</div>
+            <div className="w-full sm:w-[200px] bg-[#111111] p-3 font-semibold text-gray-300 border-b border-[#DBB155]/10">Displayed tee time price</div>
             <div className="flex-1 p-3 text-gray-400 border-b border-[#DBB155]/5">{price}</div>
           </div>
           <div className="flex flex-col sm:flex-row">
@@ -796,55 +486,37 @@ function BookingForm() {
 
       <div className="h-px bg-[#DBB155]/20 w-full my-2"></div>
 
-      {/* Payment */}
+      {/* Checkout status */}
       <div className="flex flex-col gap-6">
-        <h2 className="text-[#DBB155] font-bold tracking-wide uppercase">Payment</h2>
-
-        <div className="max-w-[400px]">
-          <div className="relative border border-[#DBB155]/20 rounded-[3px] flex items-center p-3 bg-[#111111]">
-            <div className="flex items-center gap-3 flex-1">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-gray-500">
-                <rect x="2" y="5" width="20" height="14" rx="2" fill="currentColor" />
-                <rect x="2" y="9" width="20" height="3" fill="#000000" fillOpacity="0.4" />
-              </svg>
-              <input
-                type="text" placeholder="Card number"
-                className="w-full outline-none text-sm placeholder-gray-600 bg-transparent text-white"
-                value={cardNumber}
-                onChange={(e) => setCardNumber(e.target.value)}
-              />
-            </div>
-            <button className="bg-[#DBB155] hover:bg-[#c9a04a] text-black text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors">
-              Autofill
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        </div>
+        <h2 className="text-[#DBB155] font-bold tracking-wide uppercase">Checkout</h2>
+        <p className="max-w-[600px] text-gray-400 text-sm leading-6">This site does not collect card details. If BRS checkout preparation succeeds, the result will be shown above. A secure payment provider and verified payment status are not connected here.</p>
 
         {submitError && (
-          <div className="text-[#d9534f] text-sm max-w-[400px]">{submitError}</div>
+          <div role="alert" className="text-[#d9534f] text-sm max-w-[400px]">
+            {submitError}
+            <Link href="/tee-times" className="block mt-2 text-[#DBB155] underline">Choose a tee time again</Link>
+          </div>
         )}
 
         <div className="flex flex-col-reverse sm:flex-row justify-start items-center gap-4 mt-6 mb-12">
           <button
+            type="button"
             onClick={() => router.push('/')}
             className="w-full sm:w-auto px-8 sm:px-12 py-3 border border-[#d9534f] text-[#d9534f] hover:bg-[#d9534f] hover:text-white transition-colors font-bold text-xs tracking-widest uppercase rounded-[3px]"
           >
             Cancel
           </button>
           <button
-            onClick={handlePay}
-            disabled={submitting}
+            type="submit"
+            disabled={submitting || Boolean(bookingIntentStatus && !bookingIntentStatus.retryable) || !booking}
             className="w-full sm:w-auto px-8 sm:px-24 py-3 bg-[#DBB155] hover:bg-[#c9a04a] disabled:bg-[#DBB155]/40 transition-colors text-black font-bold text-xs tracking-widest uppercase rounded-[3px]"
           >
-            {submitting ? "Processing..." : "Pay"}
+            {submitting ? "Checking with BRS..." : bookingIntentStatus && !bookingIntentStatus.retryable ? "Review status before retrying" : bookingIntentStatus ? "Retry price and checkout check" : "Check price and prepare checkout"}
           </button>
         </div>
       </div>
 
-    </div>
+    </form>
   );
 }
 

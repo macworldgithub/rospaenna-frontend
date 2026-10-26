@@ -71,7 +71,7 @@ export default function BookGolfPage() {
             Tee Times at Rosapenna
           </h1>
           <p className="text-base md:text-[17px] leading-relaxed max-w-[900px] text-gray-300">
-            Click below to book your tee times. Please note that if you're
+            Click below to book your tee times. Please note that if you&apos;re
             booking Stay &amp; Play, golf will be booked at a discounted rate
             by the resort as part of that package —{" "}
             <Link href="#" className="text-[#DBB155] hover:underline">
@@ -90,7 +90,7 @@ export default function BookGolfPage() {
           {courses.map((course) => (
             <Link
               key={course.id}
-              href="/tee-times"
+              href={`/tee-times?course=${course.id}`}
               className="group relative block aspect-[1/2.2] w-full max-w-[220px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.03]"
             >
               {/* Background image */}

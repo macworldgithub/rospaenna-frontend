@@ -377,16 +377,21 @@ import {
   useRef,
   useEffect,
   useMemo,
+  useCallback,
 } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, Sun, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
-import { COURSES, TeeTime, TeesheetData, PendingBooking } from "@/types/teesheet";
+import { COURSES, TeeTime, TeesheetData, PendingBooking, TeesheetCacheInfo } from "@/types/teesheet";
+
+const irelandToday = () => new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Dublin", year: "numeric", month: "2-digit", day: "2-digit",
+}).format(new Date());
 
 export default function Home() {
   const router = useRouter();
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>("2026-07-19");
+  const [selectedDate, setSelectedDate] = useState<string>(irelandToday);
   const [mounted, setMounted] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<string>("old-tom-morris");
   const [showTodaysMessage, setShowTodaysMessage] = useState<boolean>(true);
@@ -399,11 +404,20 @@ export default function Home() {
 
   const [teesheet, setTeesheet] = useState<TeesheetData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<TeesheetCacheInfo | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
 
   const dateInputRef = useRef<HTMLInputElement>(null);
   const sliderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // The date is formatted only after hydration to avoid server/client timezone differences.
+    const requestedCourse = new URLSearchParams(window.location.search).get("course");
+    if (requestedCourse) {
+      // Initialize from the browser URL after hydration; the server cannot read its query here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedCourse(requestedCourse);
+    }
     setMounted(true);
   }, []);
 
@@ -423,31 +437,46 @@ export default function Home() {
     return `${dayName} ${day}${suffix} ${monthName}`;
   };
 
-  // ── Fetch teesheet whenever date or course changes ──
-  const loadTeesheet = async () => {
+  // Changing filters and refreshing read saved results; they never call BRS.
+  const loadTeesheet = useCallback(async () => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setIsRefreshing(true);
     setLoadError(null);
+    setTeesheet(null);
+    setCacheInfo(null);
     try {
       const course = COURSES[selectedCourse];
+      if (!course) {
+        throw new Error(selectedCourse === "st-patricks"
+          ? "Online tee times for St Patrick's Links are not available on this page yet. Please contact Reservations."
+          : "This course selection is not supported. Please choose Old Tom Morris or Sandy Hills Links.");
+      }
       const res = await fetch(
-        `/api/teesheet?date=${selectedDate}&course_id=${course.id}`
+        `/api/teesheet?date=${selectedDate}&course_id=${course.id}`,
+        { signal: controller.signal, cache: "no-store" }
       );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load tee times");
       setTeesheet(json.data as TeesheetData);
+      setCacheInfo(json.cache as TeesheetCacheInfo);
     } catch (err) {
+      if (controller.signal.aborted) return;
       setLoadError(err instanceof Error ? err.message : "Failed to load tee times");
       setTeesheet(null);
     } finally {
-      setIsRefreshing(false);
+      if (!controller.signal.aborted) setIsRefreshing(false);
     }
-  };
+  }, [selectedDate, selectedCourse]);
 
   useEffect(() => {
     if (!mounted) return;
+    // Synchronize the selected course/date with an external cached API.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTeesheet();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, selectedDate, selectedCourse]);
+    return () => requestRef.current?.abort();
+  }, [mounted, loadTeesheet]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -479,7 +508,7 @@ export default function Home() {
   };
 
   /* ── Derive packages + filtered tee times from live data ── */
-  const teeTimes: TeeTime[] = teesheet?.tee_times ?? [];
+  const teeTimes: TeeTime[] = useMemo(() => teesheet?.tee_times ?? [], [teesheet]);
 
   const inTimeRange = (time: string) => {
     const hour = parseInt(time.split(":")[0], 10);
@@ -522,6 +551,10 @@ export default function Home() {
   const availableSlotCount = (t: TeeTime) =>
     Object.values(t.slots).filter((s) => s.status === "Available").length;
 
+  const formatPrice = (price: string | number) => new Intl.NumberFormat("en-IE", {
+    style: "currency", currency: teesheet?.currency_code || "EUR",
+  }).format(Number(price));
+
   const priceForPlayers = (gf: TeeTime["green_fees"][number], players: number) => {
     const key = `green_fee${players}_ball` as
       | "green_fee1_ball"
@@ -533,18 +566,35 @@ export default function Home() {
 
   const handleSelectPlayers = (t: TeeTime, gf: TeeTime["green_fees"][number], players: number) => {
     const price = priceForPlayers(gf, players);
-    if (!price) return;
+    const course = COURSES[selectedCourse];
+    if (!price || !course) return;
+
+    let bookingIntentKey = crypto.randomUUID();
+    try {
+      const previous = JSON.parse(sessionStorage.getItem("pendingBooking") || "null") as PendingBooking | null;
+      const sameSelection = previous && previous.date === selectedDate &&
+        previous.course?.id === course.id && previous.teeTime?.id === t.id &&
+        previous.greenFee?.id === gf.id && previous.players === players &&
+        previous.price === price && previous.currency === (teesheet?.currency_code || "EUR");
+      if (sameSelection && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(previous.bookingIntentKey)) {
+        bookingIntentKey = previous.bookingIntentKey;
+      }
+    } catch {
+      // A fresh key is used when the previous browser selection cannot be read.
+    }
 
     const booking: PendingBooking = {
+      bookingIntentKey,
       teeTime: t,
       greenFee: gf,
-      course: COURSES[selectedCourse],
+      course,
       date: selectedDate,
       price,
       players,
+      currency: teesheet?.currency_code || "EUR",
     };
     sessionStorage.setItem("pendingBooking", JSON.stringify(booking));
-    router.push(`/booking?players=${players}&price=${price}`);
+    router.push("/booking");
   };
 
   const toggleActive = "bg-[#DBB155] text-black";
@@ -575,6 +625,8 @@ export default function Home() {
                 type="date"
                 className="absolute left-0 top-0 w-0 h-0 opacity-0"
                 value={selectedDate}
+                min={irelandToday()}
+                max={cacheInfo?.window_end}
                 onChange={(e) => setSelectedDate(e.target.value)}
               />
             </div>
@@ -625,7 +677,10 @@ export default function Home() {
                       <input
                         type="radio" name="course" value={value}
                         checked={selectedCourse === value}
-                        onChange={(e) => setSelectedCourse(e.target.value)}
+                        onChange={() => {
+                          setSelectedCourse(value);
+                          router.replace(`/tee-times?course=${encodeURIComponent(value)}`, { scroll: false });
+                        }}
                         className="hidden"
                       />
                       <div className={`w-4 h-4 rounded-full border flex items-center justify-center p-[2px] ${selectedCourse === value ? "border-[#DBB155]" : "border-gray-600 group-hover:border-[#DBB155]/60"}`}>
@@ -694,8 +749,16 @@ export default function Home() {
         {/* ── Middle Column – Tee Times ── */}
         <div className="flex-1 flex flex-col gap-6">
 
+          <div className="border border-[#DBB155]/30 p-4 text-sm text-gray-300 rounded-[3px]" role="status">
+            {cacheInfo ? <>
+              Last updated {new Date(cacheInfo.fetched_at).toLocaleString("en-IE", { timeZone: "Europe/Dublin" })} (Ireland time).
+              {cacheInfo.stale && " The latest daily update is delayed; these are the last saved results."}
+              <span className="block mt-1">Availability and prices will be checked again before you proceed with your booking.</span>
+            </> : "Tee times are updated daily. Availability and prices are checked again before booking."}
+          </div>
+
           {/* Today's Message */}
-          {selectedCourse === "old-tom-morris" && showTodaysMessage && (
+          {showTodaysMessage && !!teesheet?.messages?.length && (
             <div className="bg-[#0a0a0a] border border-[#DBB155]/30 p-5 relative text-sm rounded-[3px]">
               <button
                 onClick={() => setShowTodaysMessage(false)}
@@ -703,19 +766,17 @@ export default function Home() {
               >
                 <X className="w-5 h-5 bg-[#DBB155] text-black rounded-full p-1" />
               </button>
-              <div className="font-bold text-[#DBB155] mb-2 text-[13px]">Today's Message</div>
+              <div className="font-bold text-[#DBB155] mb-2 text-[13px]">Today&apos;s Message</div>
               <div className="text-gray-400 leading-relaxed text-[13px]">
-                <span className="font-bold text-gray-200">06:00 - Irish Resident Rate</span>{" "}
-                - please note this rate is for selected off peak tee times.
-                Additional peak tee times (Standard Visitor times) will become
-                bookable within 28 days of your selected date of play, if they
-                remain available.
+                {teesheet.messages.map((message, index) => (
+                  <p key={index}>{message.time} - {message.message}</p>
+                ))}
               </div>
             </div>
           )}
 
           {loadError && (
-            <div className="bg-[#2a0f0f] border border-[#d9534f]/40 text-[#d9534f] text-sm p-4 rounded-[3px]">
+            <div role="alert" className="bg-[#2a0f0f] border border-[#d9534f]/40 text-[#d9534f] text-sm p-4 rounded-[3px]">
               {loadError}
             </div>
           )}
@@ -737,16 +798,17 @@ export default function Home() {
 
                     if (timesForPackage.length === 0) return null;
 
-                    const firstGf = timesForPackage[0].green_fees.find((g) =>
-                      pkg.ids.includes(g.id)
-                    )!;
+                    const startingPrice = Math.min(...timesForPackage.flatMap(t =>
+                      t.green_fees.filter(g => pkg.ids.includes(g.id) && g.green_fee1_ball !== null)
+                        .map(g => Number(g.green_fee1_ball))
+                    ));
 
                     return (
                       <div key={pkg.name}>
                         <div className="bg-[#1a1510] border border-[#DBB155]/30 px-5 py-3 flex justify-between items-center font-bold tracking-wide uppercase text-[12px] rounded-t-[3px]">
                           <span className="text-[#DBB155]">{pkg.name}</span>
                           <span className="text-white">
-                            From €{parseFloat(firstGf.green_fee1_ball!).toFixed(2)}
+                            From {formatPrice(startingPrice)}
                           </span>
                         </div>
                         <div className="bg-[#0a0a0a] border-x border-b border-[#DBB155]/20 p-5 rounded-b-[3px]">
@@ -785,7 +847,7 @@ export default function Home() {
                                           onClick={() => handleSelectPlayers(t, gf, p)}
                                           className="bg-[#DBB155] hover:bg-[#c9a04a] text-black py-1.5 px-3 text-[12px] font-bold text-left rounded-[2px] transition-colors w-full"
                                         >
-                                          {p} PLAYER — €{parseFloat(price!).toFixed(2)}
+                                          {p} PLAYER — {formatPrice(price!)}
                                         </button>
                                       ))}
                                     </div>

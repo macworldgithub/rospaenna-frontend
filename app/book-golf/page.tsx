@@ -8,6 +8,7 @@ const courses = [
     image: "/images/oldTom.jpg",
     logo: "/images/OTM.png",
     alt: "Old Tom Morris Links",
+    available: true,
   },
   {
     id: "sandy-hills",
@@ -15,6 +16,7 @@ const courses = [
     image: "/images/sandhill-bg.jpg",
     logo: "/images/sandyhills.png",
     alt: "Sandy Hills Links",
+    available: true,
   },
   {
     id: "st-patricks",
@@ -22,6 +24,7 @@ const courses = [
     image: "/images/ST-patricks.jpg",
     logo: "/images/stpatricks.png",
     alt: "St. Patrick's Links",
+    available: false,
   },
 ];
 
@@ -88,34 +91,71 @@ export default function BookGolfPage() {
         {/* Course Cards — click navigates to /tee-times */}
         <div className="flex flex-col md:flex-row justify-center items-center md:items-start gap-8 lg:gap-14">
           {courses.map((course) => (
-            <Link
-              key={course.id}
-              href={`/tee-times?course=${course.id}`}
-              className="group relative block aspect-[1/2.2] w-full max-w-[220px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.03]"
-            >
-              {/* Background image */}
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-80 transition-opacity duration-300 group-hover:opacity-100"
-                style={{ backgroundImage: `url("${course.image}")` }}
-              />
-              {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+            course.available ? (
+              <Link
+                key={course.id}
+                href={`/tee-times?course=${course.id}`}
+                className="group relative block aspect-[1/2.2] w-full max-w-[220px] overflow-hidden bg-black transition-transform duration-300 hover:scale-[1.03]"
+              >
+                {/* Background image */}
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-80 transition-opacity duration-300 group-hover:opacity-100"
+                  style={{ backgroundImage: `url("${course.image}")` }}
+                />
+                {/* Gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
 
-              {/* Logo */}
-              <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col items-center justify-end h-[50%]">
-                <div className="relative w-full h-full max-h-[140px] shrink-0">
-                  <Image
-                    src={course.logo}
-                    alt={course.alt}
-                    fill
-                    className="object-contain object-bottom drop-shadow-md"
-                  />
+                {/* Logo */}
+                <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col items-center justify-end h-[50%]">
+                  <div className="relative w-full h-full max-h-[140px] shrink-0">
+                    <Image
+                      src={course.logo}
+                      alt={course.alt}
+                      fill
+                      className="object-contain object-bottom drop-shadow-md"
+                    />
+                  </div>
+                </div>
+
+                {/* Hover glow border */}
+                <div className="absolute inset-0 border border-transparent group-hover:border-[#DBB155]/40 transition-colors duration-300" />
+              </Link>
+            ) : (
+              <div
+                key={course.id}
+                className="relative block aspect-[1/2.2] w-full max-w-[220px] overflow-hidden bg-black opacity-60 border border-gray-800"
+              >
+                {/* Background image with grayscale */}
+                <div
+                  className="absolute inset-0 bg-cover bg-center grayscale opacity-30"
+                  style={{ backgroundImage: `url("${course.image}")` }}
+                />
+                {/* Gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/40" />
+
+                {/* Unavailable Badge */}
+                <div className="absolute top-4 left-2 right-2 text-center z-10">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-black/90 text-amber-300/90 border border-amber-500/30">
+                    Online Booking Unavailable
+                  </span>
+                </div>
+
+                {/* Logo */}
+                <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col items-center justify-end h-[50%]">
+                  <div className="relative w-full h-full max-h-[140px] shrink-0 grayscale opacity-60">
+                    <Image
+                      src={course.logo}
+                      alt={course.alt}
+                      fill
+                      className="object-contain object-bottom drop-shadow-md"
+                    />
+                  </div>
+                  <span className="text-[11px] text-gray-400 mt-2 text-center">
+                    Please call the resort directly to book
+                  </span>
                 </div>
               </div>
-
-              {/* Hover glow border */}
-              <div className="absolute inset-0 border border-transparent group-hover:border-[#DBB155]/40 transition-colors duration-300" />
-            </Link>
+            )
           ))}
         </div>
       </div>

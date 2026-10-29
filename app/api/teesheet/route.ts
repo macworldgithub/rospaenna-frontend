@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   const date = searchParams.get("date");
   const courseId = searchParams.get("course_id");
 
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !courseId || !["1", "3"].includes(courseId)) {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !courseId || !["1", "3", "4"].includes(courseId)) {
     return NextResponse.json({ error: "A valid date and supported course are required." }, { status: 400 });
   }
 

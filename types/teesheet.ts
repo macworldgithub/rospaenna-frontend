@@ -45,6 +45,9 @@ export interface TeesheetCacheInfo {
   stale: boolean;
   window_start: string;
   window_end: string;
+  live?: boolean;
+  storage?: string;
+  ttl_seconds?: number;
 }
 
 export interface Course {
@@ -60,15 +63,22 @@ export const COURSES: Record<string, Course> = {
     id: 1,
     facilities_id: 5797,
     name: "Old Tom Morris Links",
-    playing_time: "",
+    playing_time: "4h 15m",
     colour: "",
   },
   "sandy-hills": {
     id: 3,
     facilities_id: 5896,
     name: "Sandy Hills Links",
-    playing_time: "",
+    playing_time: "4h 30m",
     colour: "3",
+  },
+  "st-patricks": {
+    id: 4,
+    facilities_id: 5897,
+    name: "St Patrick's Links",
+    playing_time: "4h 30m",
+    colour: "4",
   },
 };
 

@@ -11,14 +11,20 @@ export class BookingBackendError extends Error {
 }
 
 // Called only by server routes. Never expose the backend API key to the browser.
-export async function bookingBackend<T>(path: string, body?: unknown, extraHeaders: Record<string, string> = {}): Promise<T> {
+export async function bookingBackend<T>(
+  path: string,
+  body?: unknown,
+  extraHeaders: Record<string, string> = {},
+  method?: "GET" | "POST" | "PUT" | "DELETE"
+): Promise<T> {
   const baseUrl = process.env.BOOKING_BACKEND_URL || "http://127.0.0.1:4040";
   const key = process.env.BOOKING_API_KEY;
   if (!key) throw new BookingBackendError("The booking service is not configured yet.", 503, undefined, "configuration");
   let response: Response;
+  const httpMethod = method ?? (body === undefined ? "GET" : "POST");
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
-      method: body === undefined ? "GET" : "POST",
+      method: httpMethod,
       headers: {
         ...extraHeaders,
         "X-API-Key": key,

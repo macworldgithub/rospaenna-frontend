@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:checkout": "node --test scripts/brs-checkout.test.cjs"
+    "test": "node --test scripts/brs-checkout.test.cjs scripts/truthful-booking-status.test.cjs",
+    "test:checkout": "node --test scripts/brs-checkout.test.cjs",
+    "test:status": "node --test scripts/truthful-booking-status.test.cjs"
   },
   "dependencies": {
     "lucide-react": "^1.23.0",

@@ -24,7 +24,7 @@ const courses = [
     image: "/images/ST-patricks.jpg",
     logo: "/images/stpatricks.png",
     alt: "St. Patrick's Links",
-    available: false,
+    available: true,
   },
 ];
 

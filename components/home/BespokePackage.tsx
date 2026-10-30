@@ -15,7 +15,12 @@ import {
   Phone,
   Mail,
   ShieldCheck,
+  Loader2,
+  Clock,
+  Lock,
+  Coffee,
 } from "lucide-react";
+import type { PackageSearchResponse } from "@/lib/packagesClient";
 
 const steps = [
   { title: "Dates", icon: Calendar },
@@ -78,10 +83,11 @@ export default function BespokePackage() {
   const [roomBedType, setRoomBedType] = useState<"TWIN" | "DOUBLE" | "SINGLE">("TWIN");
   const [roomCount, setRoomCount] = useState(1);
 
-  // Step 3: Golf Rounds & Caddies
-  const [stPatricksRounds, setStPatricksRounds] = useState(1);
-  const [sandyHillsRounds, setSandyHillsRounds] = useState(1);
-  const [oldTomMorrisRounds, setOldTomMorrisRounds] = useState(0);
+  // Step 3: Interactive Day-by-Day Golf Schedule
+  const [dailyGolfPlan, setDailyGolfPlan] = useState<
+    Record<string, { courseId: number | null; timeSlot: string; isRestDay: boolean }>
+  >({});
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [playOnArrival, setPlayOnArrival] = useState(false);
   const [playOnDeparture, setPlayOnDeparture] = useState(false);
   const [requestCaddies, setRequestCaddies] = useState(false);
@@ -97,6 +103,11 @@ export default function BespokePackage() {
     balanceDue: string;
     balanceDueDate: string;
   } | null>(null);
+
+  // Live Opera & BRS Search State (Ticket N03)
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<PackageSearchResponse | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // Restore inputs from sessionStorage on mount
   useEffect(() => {
@@ -116,9 +127,9 @@ export default function BespokePackage() {
         if (data.roomCategory) setRoomCategory(data.roomCategory);
         if (data.roomBedType) setRoomBedType(data.roomBedType);
         if (data.roomCount) setRoomCount(data.roomCount);
-        if (typeof data.stPatricksRounds === "number") setStPatricksRounds(data.stPatricksRounds);
-        if (typeof data.sandyHillsRounds === "number") setSandyHillsRounds(data.sandyHillsRounds);
-        if (typeof data.oldTomMorrisRounds === "number") setOldTomMorrisRounds(data.oldTomMorrisRounds);
+        if (data.dailyGolfPlan) setDailyGolfPlan(data.dailyGolfPlan);
+        if (typeof data.playOnArrival === "boolean") setPlayOnArrival(data.playOnArrival);
+        if (typeof data.playOnDeparture === "boolean") setPlayOnDeparture(data.playOnDeparture);
         if (typeof data.requestCaddies === "boolean") setRequestCaddies(data.requestCaddies);
       }
     } catch {
@@ -142,9 +153,9 @@ export default function BespokePackage() {
         roomCategory,
         roomBedType,
         roomCount,
-        stPatricksRounds,
-        sandyHillsRounds,
-        oldTomMorrisRounds,
+        dailyGolfPlan,
+        playOnArrival,
+        playOnDeparture,
         requestCaddies,
       };
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -164,9 +175,9 @@ export default function BespokePackage() {
     roomCategory,
     roomBedType,
     roomCount,
-    stPatricksRounds,
-    sandyHillsRounds,
-    oldTomMorrisRounds,
+    dailyGolfPlan,
+    playOnArrival,
+    playOnDeparture,
     requestCaddies,
   ]);
 
@@ -207,9 +218,180 @@ export default function BespokePackage() {
     return 4;
   }, [nights]);
 
+  // Derived Stay Days for Day-by-Day Golf Scheduling
+  const stayDates = useMemo(() => {
+    if (!arrivalDate) return [];
+    const days: { index: number; date: string; formattedShort: string; isArrival: boolean; isDeparture: boolean }[] = [];
+    const [year, month, day] = arrivalDate.split("-").map(Number);
+    const count = playOnDeparture ? nights + 1 : nights;
+
+    for (let i = 0; i < count; i++) {
+      const d = new Date(Date.UTC(year, month - 1, day + i));
+      const dateStr = d.toISOString().split("T")[0];
+      const formattedShort = new Intl.DateTimeFormat("en-IE", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }).format(d);
+
+      days.push({
+        index: i,
+        date: dateStr,
+        formattedShort,
+        isArrival: i === 0,
+        isDeparture: i === nights,
+      });
+    }
+    return days;
+  }, [arrivalDate, nights, playOnDeparture]);
+
+  // Helper: St Patrick's Links closure and agronomy status checker
+  const getStPatricksStatusForDate = (dateStr: string) => {
+    if (!dateStr) return { isAvailable: false, reason: "" };
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const mmDd = `${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+    if (m === 11 || m === 12 || m === 1 || m === 2 || m === 3) {
+      return {
+        isAvailable: false,
+        reason: "St Patrick's Links is resting for winter maintenance (November to March).",
+      };
+    }
+
+    if (CLOSURES.ST_PATRICKS.includes(mmDd)) {
+      return {
+        isAvailable: false,
+        reason: "St Patrick's Links is resting for scheduled agronomy maintenance on this date.",
+      };
+    }
+
+    const liveDay = searchResults?.daily_golf_options?.find(
+      (g) => g.course_id === 4 && g.date === dateStr
+    );
+    if (liveDay?.is_closed) {
+      return {
+        isAvailable: false,
+        reason: liveDay.closure_reason || "St Patrick's Links is closed on this date.",
+      };
+    }
+
+    return { isAvailable: true, reason: "" };
+  };
+
+  const isStPatricksClosedForAllStayDays = useMemo(() => {
+    if (!stayDates.length) return false;
+    return stayDates.every((day) => !getStPatricksStatusForDate(day.date).isAvailable);
+  }, [stayDates, searchResults]);
+
+  // Synchronize dailyGolfPlan with stay dates and closure states
+  useEffect(() => {
+    if (!stayDates.length) return;
+    setDailyGolfPlan((prev) => {
+      const next = { ...prev };
+      let changed = false;
+
+      stayDates.forEach((day, idx) => {
+        const existing = next[day.date];
+        const stpStatus = getStPatricksStatusForDate(day.date);
+
+        // If selected St Patrick's but it is closed on this date, fallback to Sandy Hills
+        if (existing && existing.courseId === 4 && !stpStatus.isAvailable) {
+          next[day.date] = {
+            courseId: 3,
+            timeSlot: existing.timeSlot || "10:00",
+            isRestDay: false,
+          };
+          changed = true;
+          return;
+        }
+
+        if (!existing) {
+          changed = true;
+          if (idx === 0) {
+            next[day.date] = { courseId: 3, timeSlot: "13:30", isRestDay: false };
+          } else if (idx === 1) {
+            next[day.date] = { courseId: stpStatus.isAvailable ? 4 : 1, timeSlot: "10:00", isRestDay: false };
+          } else if (idx === 2) {
+            next[day.date] = { courseId: 1, timeSlot: "09:30", isRestDay: false };
+          } else {
+            next[day.date] = { courseId: null, timeSlot: "", isRestDay: true };
+          }
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [stayDates, searchResults]);
+
+  // Derived counts of scheduled rounds
+  const { stPatricksRounds, sandyHillsRounds, oldTomMorrisRounds } = useMemo(() => {
+    let stp = 0;
+    let sandy = 0;
+    let oldTom = 0;
+
+    stayDates.forEach((day) => {
+      const plan = dailyGolfPlan[day.date];
+      if (plan && !plan.isRestDay) {
+        if (plan.courseId === 4) stp++;
+        else if (plan.courseId === 3) sandy++;
+        else if (plan.courseId === 1) oldTom++;
+      }
+    });
+
+    return {
+      stPatricksRounds: stp,
+      sandyHillsRounds: sandy,
+      oldTomMorrisRounds: oldTom,
+    };
+  }, [stayDates, dailyGolfPlan]);
+
   const totalRounds = stPatricksRounds + sandyHillsRounds + oldTomMorrisRounds;
   const hasEnoughRounds = totalRounds >= minRequiredRounds;
   const hasValidArrival = /^\d{4}-\d{2}-\d{2}$/.test(arrivalDate) && arrivalDate >= irelandToday();
+
+  // Active Day & Handlers for Day-by-Day Golf Scheduling
+  const safeActiveDayIndex = Math.min(activeDayIndex, Math.max(0, stayDates.length - 1));
+  const activeDay = stayDates[safeActiveDayIndex] || stayDates[0];
+  const activeDayPlan = activeDay ? dailyGolfPlan[activeDay.date] : null;
+
+  const handleSelectCourse = (dateStr: string, courseId: number) => {
+    setDailyGolfPlan((prev) => {
+      const existing = prev[dateStr];
+      return {
+        ...prev,
+        [dateStr]: {
+          courseId,
+          timeSlot: existing?.timeSlot || "10:00",
+          isRestDay: false,
+        },
+      };
+    });
+  };
+
+  const handleSelectTimeSlot = (dateStr: string, timeSlot: string) => {
+    setDailyGolfPlan((prev) => {
+      const existing = prev[dateStr];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [dateStr]: {
+          ...existing,
+          timeSlot,
+        },
+      };
+    });
+  };
+
+  const handleSelectRestDay = (dateStr: string) => {
+    setDailyGolfPlan((prev) => ({
+      ...prev,
+      [dateStr]: {
+        courseId: null,
+        timeSlot: "",
+        isRestDay: true,
+      },
+    }));
+  };
 
   // Occupancy Validation (N02 Requirement: supports groups over 4)
   const bedCapacityPerRoom = roomBedType === "SINGLE" ? 1 : 2;
@@ -257,6 +439,70 @@ export default function BespokePackage() {
 
     return [...new Set(warnings)];
   }, [arrivalDate, nights, stPatricksRounds, sandyHillsRounds, oldTomMorrisRounds]);
+
+  // Live Opera Room & BRS Golf Search Effect (Ticket N03)
+  useEffect(() => {
+    if (!hasValidArrival || !departureDate || nights < 2 || nights > 5) {
+      setSearchResults(null);
+      return;
+    }
+
+    let isMounted = true;
+    setIsSearching(true);
+    setSearchError(null);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/packages/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            arrival_date: arrivalDate,
+            departure_date: departureDate,
+            party_size: groupSize,
+            room_count: roomCount,
+            bed_type: roomBedType,
+            preferred_courses: [1, 3, 4],
+            residence_country: residenceCountry,
+            has_golf_ireland_index: hasGolfIrelandIndex,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Search returned HTTP ${res.status}`);
+        }
+
+        const data: PackageSearchResponse = await res.json();
+        if (isMounted) {
+          setSearchResults(data);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setSearchError(err?.message || "Live search service temporarily unavailable.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsSearching(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [
+    arrivalDate,
+    departureDate,
+    nights,
+    hasValidArrival,
+    groupSize,
+    roomCount,
+    roomBedType,
+    residenceCountry,
+    hasGolfIrelandIndex,
+  ]);
 
   // Pricing Calculation based on approved rules
   const pricing = useMemo(() => {
@@ -723,34 +969,61 @@ export default function BespokePackage() {
           {/* STEP 2: ROOMS & OCCUPANCY */}
           {currentStep === 2 && (
             <div className="space-y-6">
+              {/* Live Opera Inventory Status Banner */}
+              {isSearching ? (
+                <div className="p-3 bg-[#111] border border-[#D4AF55]/30 rounded-sm flex items-center gap-2 text-xs text-[#D4AF55]">
+                  <Loader2 size={14} className="animate-spin" /> Verifying live Opera Cloud room inventory &amp; buffers...
+                </div>
+              ) : searchResults ? (
+                <div className="p-3 bg-[#111] border border-white/10 rounded-sm flex items-center justify-between text-xs text-gray-300">
+                  <span>Opera Cloud Live Inventory: {searchResults.room_options.filter((r) => r.is_available).length} category options available</span>
+                  <span className="text-[11px] text-emerald-400 font-medium">Cap &amp; Buffers Enforced</span>
+                </div>
+              ) : null}
+
               {/* Room Category Selection */}
               <div>
                 <label className="block uppercase tracking-[0.2em] text-[11px] text-[#A88945] font-semibold mb-3">
                   Select Room Category
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {ROOM_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setRoomCategory(cat.id)}
-                      className={`p-4 border rounded-sm text-left transition-all ${
-                        roomCategory === cat.id
-                          ? "border-[#D4AF55] bg-[#D4AF55]/10"
-                          : "border-white/10 bg-[#111] hover:border-white/30"
-                      }`}
-                    >
-                      <div className="flex justify-between items-center mb-1">
-                        <span className={`font-serif font-semibold text-base ${roomCategory === cat.id ? "text-[#D4AF55]" : "text-white"}`}>
-                          {cat.name}
-                        </span>
-                        <span className="text-xs text-gray-400 font-mono">
-                          from €{cat.doubleRate.low}/night
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-400">{cat.desc}</p>
-                    </button>
-                  ))}
+                  {ROOM_CATEGORIES.map((cat) => {
+                    const liveOpt = searchResults?.room_options?.find(
+                      (r) => r.room_category.toUpperCase() === cat.id.toUpperCase()
+                    );
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setRoomCategory(cat.id)}
+                        className={`p-4 border rounded-sm text-left transition-all ${
+                          roomCategory === cat.id
+                            ? "border-[#D4AF55] bg-[#D4AF55]/10"
+                            : "border-white/10 bg-[#111] hover:border-white/30"
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className={`font-serif font-semibold text-base ${roomCategory === cat.id ? "text-[#D4AF55]" : "text-white"}`}>
+                            {cat.name}
+                          </span>
+                          <span className="text-xs text-gray-400 font-mono">
+                            {liveOpt?.rate_per_night
+                              ? `€${liveOpt.rate_per_night}/night`
+                              : `from €${cat.doubleRate.low}/night`}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400">{cat.desc}</p>
+                        {liveOpt && (
+                          <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
+                            <span className={liveOpt.is_available ? "text-emerald-400 font-medium" : "text-amber-400"}>
+                              {liveOpt.is_available ? `✓ ${liveOpt.available_rooms} rooms open in Opera` : "⚠️ Buffer held / Low stock"}
+                            </span>
+                            <span className="text-gray-400 font-mono">B&amp;B Included</span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -820,84 +1093,327 @@ export default function BespokePackage() {
             </div>
           )}
 
-          {/* STEP 3: GOLF ROUNDS & CADDIES */}
+          {/* STEP 3: INTERACTIVE DAY-BY-DAY GOLF SCHEDULE */}
           {currentStep === 3 && (
             <div className="space-y-6">
+              {/* Stay & Play Policy Notice */}
               <div className="border border-[#5d4a20] bg-[#19140C] p-4 flex gap-3 items-start text-xs text-[#E2BE69] leading-relaxed">
                 <Info size={18} className="text-[#D4AF55] mt-0.5 shrink-0" />
-                <p>
-                  <strong>Stay &amp; Play Round Minimum:</strong> For a stay of {nights} nights, at least <strong>{minRequiredRounds} rounds</strong> are required. You currently have {totalRounds} selected.
-                </p>
+                <div>
+                  <p>
+                    <strong>Stay &amp; Play Round Minimum:</strong> For a stay of {nights} nights, at least <strong>{minRequiredRounds} rounds</strong> are required. You currently have <strong>{totalRounds} round(s)</strong> scheduled.
+                  </p>
+                  <p className="mt-1 text-gray-400 text-[11px]">
+                    Select each day below to choose your championship links and preferred tee time slot.
+                  </p>
+                </div>
               </div>
 
-              {/* Course Rounds Selector */}
-              <div className="space-y-3">
-                {GOLF_COURSES.map((course) => {
-                  const currentRounds =
-                    course.id === "st-patricks"
-                      ? stPatricksRounds
-                      : course.id === "sandy-hills"
-                      ? sandyHillsRounds
-                      : oldTomMorrisRounds;
+              {/* Whole Stay St Patrick's Closure Notice */}
+              {isStPatricksClosedForAllStayDays && (
+                <div className="p-4 bg-amber-950/30 border border-amber-800/50 rounded-sm text-xs text-amber-300 flex items-start gap-3">
+                  <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-amber-200 block mb-0.5">
+                      St Patrick&apos;s Links Notice: Resting on Selected Stay Dates
+                    </strong>
+                    <p className="text-amber-300/90 leading-relaxed text-[11px]">
+                      St Patrick&apos;s Links is resting for agronomy maintenance or seasonal rest on your stay dates. The St Patrick&apos;s option is disabled below. Your package automatically applies the <strong>Two-Championship Course Package</strong> (Sandy Hills + Old Tom Morris), saving up to €140 per golfer.
+                    </p>
+                  </div>
+                </div>
+              )}
 
-                  const setter =
-                    course.id === "st-patricks"
-                      ? setStPatricksRounds
-                      : course.id === "sandy-hills"
-                      ? setSandyHillsRounds
-                      : setOldTomMorrisRounds;
+              {/* Day-by-Day Selector Tabs */}
+              <div>
+                <label className="block uppercase tracking-[0.2em] text-[11px] text-[#A88945] font-semibold mb-2.5">
+                  Select Day to Schedule Golf
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {stayDates.map((day, idx) => {
+                    const plan = dailyGolfPlan[day.date];
+                    const isSelectedDay = safeActiveDayIndex === idx;
+                    const courseObj = GOLF_COURSES.find((c) => c.courseId === plan?.courseId);
 
-                  const rate = isGolfIrelandEligible ? course.residentRate : course.stdRate;
-
-                  return (
-                    <div
-                      key={course.id}
-                      className="p-4 bg-[#111] border border-white/10 rounded-sm flex items-center justify-between"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-serif font-semibold text-white text-base">{course.name}</span>
-                          <span className="text-[10px] text-[#D4AF55] uppercase tracking-wider">{course.badge}</span>
+                    return (
+                      <button
+                        key={day.date}
+                        type="button"
+                        onClick={() => setActiveDayIndex(idx)}
+                        className={`p-3 border rounded-sm text-left transition-all ${
+                          isSelectedDay
+                            ? "border-[#D4AF55] bg-[#D4AF55]/15 ring-1 ring-[#D4AF55]"
+                            : "border-white/10 bg-[#111] hover:border-white/25"
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className={`text-xs font-bold ${isSelectedDay ? "text-[#D4AF55]" : "text-white"}`}>
+                            Day {idx + 1}
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-mono">
+                            {day.formattedShort}
+                          </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-1">
-                          Rate: €{rate}/player ({isGolfIrelandEligible ? "Resident Rate" : "Standard Rate"})
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setter(Math.max(0, currentRounds - 1))}
-                          className="w-9 h-9 border border-white/10 rounded-sm flex items-center justify-center text-white hover:border-[#D4AF55]"
-                        >
-                          -
-                        </button>
-                        <span className="font-mono text-base font-bold text-[#D4AF55] w-6 text-center">
-                          {currentRounds}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setter(currentRounds + 1)}
-                          className="w-9 h-9 border border-white/10 rounded-sm flex items-center justify-center text-white hover:border-[#D4AF55]"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                        <div className="text-[11px] truncate">
+                          {plan?.isRestDay ? (
+                            <span className="text-sky-300 flex items-center gap-1">
+                              <Coffee size={11} /> Rest Day
+                            </span>
+                          ) : courseObj ? (
+                            <span className="text-emerald-400 font-medium">
+                              {courseObj.name.split(" ")[0]} Links
+                            </span>
+                          ) : (
+                            <span className="text-gray-500 italic">No Selection</span>
+                          )}
+                        </div>
+                        {plan?.timeSlot && !plan.isRestDay && (
+                          <div className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
+                            <Clock size={10} className="text-[#D4AF55]" /> {plan.timeSlot}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Total Rounds Indicator */}
-              <div className="flex justify-between items-center p-3.5 bg-[#141414] border border-white/5 rounded-sm text-sm">
-                <span className="text-gray-400">Total Rounds Selected:</span>
-                <span className={`font-bold ${hasEnoughRounds ? "text-emerald-400" : "text-red-400"}`}>
-                  {totalRounds} of {minRequiredRounds} Minimum Required
-                </span>
+              {/* Active Day Schedule Panel */}
+              {activeDay && (
+                <div className="p-5 bg-[#0D0D0D] border border-white/10 rounded-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-white/5 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs uppercase tracking-widest text-[#D4AF55] font-semibold">
+                          Day {safeActiveDayIndex + 1} of {stayDates.length}
+                        </span>
+                        <span className="text-xs text-gray-400 font-mono">
+                          • {activeDay.formattedShort}
+                        </span>
+                      </div>
+                      <p className="text-sm font-serif font-bold text-white mt-0.5">
+                        Choose Course &amp; Tee Time
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveDayIndex((prev) => Math.max(0, prev - 1))}
+                        disabled={safeActiveDayIndex === 0}
+                        className="px-2.5 py-1 text-xs border border-white/10 rounded-sm text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        &larr; Prev Day
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveDayIndex((prev) => Math.min(stayDates.length - 1, prev + 1))}
+                        disabled={safeActiveDayIndex === stayDates.length - 1}
+                        className="px-2.5 py-1 text-xs border border-white/10 rounded-sm text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        Next Day &rarr;
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Course Cards for Active Day */}
+                  <div className="space-y-3">
+                    {GOLF_COURSES.map((course) => {
+                      const isSelected = activeDayPlan?.courseId === course.courseId && !activeDayPlan?.isRestDay;
+                      const rate = isGolfIrelandEligible ? course.residentRate : course.stdRate;
+
+                      // St Patrick's Links specific closure check
+                      const isStP = course.courseId === 4;
+                      const stpStatus = isStP ? getStPatricksStatusForDate(activeDay.date) : { isAvailable: true, reason: "" };
+                      const isDisabled = isStP && !stpStatus.isAvailable;
+
+                      // Live tee times from BRS for this day and course
+                      const liveGolf = searchResults?.daily_golf_options?.find(
+                        (g) => g.course_id === course.courseId && g.date === activeDay.date
+                      );
+                      const openSlots = liveGolf?.tee_slots || [];
+
+                      return (
+                        <div
+                          key={course.id}
+                          className={`p-4 border rounded-sm transition-all ${
+                            isDisabled
+                              ? "bg-[#141210] border-amber-900/30 opacity-65 cursor-not-allowed"
+                              : isSelected
+                              ? "bg-[#D4AF55]/10 border-[#D4AF55]"
+                              : "bg-[#111] border-white/10 hover:border-white/20"
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className={`font-serif font-semibold text-base ${isSelected ? "text-[#D4AF55]" : "text-white"}`}>
+                                  {course.name}
+                                </span>
+                                <span className="text-[10px] text-[#D4AF55] uppercase tracking-wider">{course.badge}</span>
+                                {isDisabled && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] bg-amber-950/60 border border-amber-800/60 text-amber-300 px-2 py-0.5 rounded font-mono">
+                                    <Lock size={10} /> Resting on this date
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-400 mt-1">
+                                Green fee: €{rate}/player ({isGolfIrelandEligible ? "Golf Ireland Resident Rate" : "Standard Visitor Rate"})
+                              </p>
+                              {isDisabled && (
+                                <p className="text-[11px] text-amber-400 mt-1.5 flex items-center gap-1.5">
+                                  <AlertTriangle size={12} className="shrink-0" />
+                                  <span>{stpStatus.reason}</span>
+                                </p>
+                              )}
+                            </div>
+
+                            <div>
+                              <button
+                                type="button"
+                                disabled={isDisabled}
+                                onClick={() => handleSelectCourse(activeDay.date, course.courseId)}
+                                className={`w-full sm:w-auto px-4 py-2 text-xs font-semibold rounded-sm transition-all ${
+                                  isDisabled
+                                    ? "bg-white/5 text-gray-500 border border-white/10 cursor-not-allowed"
+                                    : isSelected
+                                    ? "bg-[#D4AF55] text-black font-bold"
+                                    : "border border-white/20 text-gray-300 hover:border-[#D4AF55] hover:text-white"
+                                }`}
+                              >
+                                {isDisabled ? "Unavailable on Date" : isSelected ? "✓ Course Selected" : "Select Course"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Live / Preferred Tee Times Selection for the Selected Course */}
+                          {isSelected && !isDisabled && (
+                            <div className="mt-4 pt-3 border-t border-white/10 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] uppercase tracking-wider text-[#D4AF55] font-semibold flex items-center gap-1">
+                                  <Clock size={12} /> Select Tee Time Slot:
+                                </span>
+                                {activeDayPlan?.timeSlot && (
+                                  <span className="text-xs text-white font-mono bg-white/10 px-2 py-0.5 rounded">
+                                    Current: <strong>{activeDayPlan.timeSlot}</strong>
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Live BRS Slots if available */}
+                              {openSlots.length > 0 ? (
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {openSlots.map((slot, sIdx) => {
+                                    const isSlotSelected = activeDayPlan?.timeSlot === slot.time;
+                                    return (
+                                      <button
+                                        key={sIdx}
+                                        type="button"
+                                        onClick={() => handleSelectTimeSlot(activeDay.date, slot.time)}
+                                        className={`px-3 py-1.5 rounded-sm border text-xs font-mono transition-all ${
+                                          isSlotSelected
+                                            ? "bg-[#D4AF55] border-[#D4AF55] text-black font-bold"
+                                            : "border-white/10 bg-white/5 text-gray-300 hover:border-white/30"
+                                        }`}
+                                      >
+                                        {slot.time} ({slot.available_slots} slots)
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                /* Convenient Standard Windows when advance booking beyond 30 days */
+                                <div className="space-y-2 pt-1">
+                                  <div className="flex flex-wrap gap-2">
+                                    {["08:30", "09:20", "10:10", "11:00", "13:30", "14:20", "15:00"].map((timeStr) => {
+                                      const isSlotSelected = activeDayPlan?.timeSlot === timeStr;
+                                      return (
+                                        <button
+                                          key={timeStr}
+                                          type="button"
+                                          onClick={() => handleSelectTimeSlot(activeDay.date, timeStr)}
+                                          className={`px-3 py-1.5 rounded-sm border text-xs font-mono transition-all ${
+                                            isSlotSelected
+                                              ? "bg-[#D4AF55] border-[#D4AF55] text-black font-bold"
+                                              : "border-white/10 bg-white/5 text-gray-300 hover:border-white/30"
+                                          }`}
+                                        >
+                                          {timeStr}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                                    <span>Or specify exact time:</span>
+                                    <input
+                                      type="time"
+                                      value={activeDayPlan?.timeSlot || "10:00"}
+                                      onChange={(e) => handleSelectTimeSlot(activeDay.date, e.target.value)}
+                                      className="bg-[#111] border border-white/10 px-2 py-1 text-white font-mono rounded text-xs outline-none focus:border-[#D4AF55]"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Rest Day Option (No Golf) */}
+                    <button
+                      type="button"
+                      onClick={() => handleSelectRestDay(activeDay.date)}
+                      className={`w-full p-4 border rounded-sm text-left transition-all flex items-center justify-between ${
+                        activeDayPlan?.isRestDay
+                          ? "border-sky-500/60 bg-sky-950/25 text-white"
+                          : "border-white/10 bg-[#111] hover:border-white/20 text-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center ${activeDayPlan?.isRestDay ? "bg-sky-500/20 text-sky-400" : "bg-white/5 text-gray-400"}`}>
+                          <Coffee size={18} />
+                        </div>
+                        <div>
+                          <span className="text-sm font-semibold text-white block">Rest Day (No Golf Scheduled)</span>
+                          <span className="text-[11px] text-gray-400">
+                            Enjoy Rosapenna leisure, coastal walks along Sheephaven Bay, or local dining.
+                          </span>
+                        </div>
+                      </div>
+                      {activeDayPlan?.isRestDay && (
+                        <span className="text-xs text-sky-400 font-semibold flex items-center gap-1">
+                          <Check size={14} /> Scheduled
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Total Rounds Indicator & Minimum Requirement Checker */}
+              <div className="p-4 bg-[#141414] border border-white/10 rounded-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="text-gray-400 block mb-0.5">Total Championship Rounds Scheduled:</span>
+                  <span className="text-sm font-bold text-white font-mono">
+                    {totalRounds} of {minRequiredRounds} minimum required ({nights} nights stay)
+                  </span>
+                </div>
+                <div>
+                  {hasEnoughRounds ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 text-xs font-semibold">
+                      <Check size={14} className="text-emerald-400" /> Package Minimum Satisfied
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-amber-950/40 border border-amber-800/50 text-amber-300 text-xs font-semibold">
+                      <AlertTriangle size={14} className="text-amber-400" /> Select {minRequiredRounds - totalRounds} more round(s)
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Caddy Request (N02 Requirement: optional request, payable on day) */}
-              <div className="pt-4 border-t border-white/5">
+              <div className="pt-2 border-t border-white/5">
                 <label className="flex items-start gap-3 cursor-pointer p-4 bg-[#111] border border-white/10 rounded-sm hover:border-white/20 transition-colors">
                   <input
                     type="checkbox"
@@ -915,7 +1431,7 @@ export default function BespokePackage() {
               </div>
 
               {/* Arrival / Departure Play Options */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <label className="flex items-center gap-2.5 text-xs text-gray-300 cursor-pointer p-3 bg-[#111] border border-white/5 rounded-sm">
                   <input
                     type="checkbox"
@@ -964,14 +1480,54 @@ export default function BespokePackage() {
                   <div className="flex justify-between"><span className="text-gray-400">Room(s):</span> <span className="text-white">{roomCount}x {roomCategory} ({roomBedType})</span></div>
                 </div>
 
-                <div className="p-4 bg-[#111] border border-white/5 rounded-sm space-y-2">
-                  <span className="text-[#D4AF55] uppercase tracking-wider font-semibold block mb-2">Golf Itinerary</span>
-                  <div className="flex justify-between"><span className="text-gray-400">St Patrick&apos;s Links:</span> <span className="text-white">{stPatricksRounds} Round(s)</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">Sandy Hills Links:</span> <span className="text-white">{sandyHillsRounds} Round(s)</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">Old Tom Morris:</span> <span className="text-white">{oldTomMorrisRounds} Round(s)</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">Caddies:</span> <span className="text-white">{requestCaddies ? "Requested (Pay on Day)" : "None"}</span></div>
+                <div className="p-4 bg-[#111] border border-white/5 rounded-sm space-y-2.5">
+                  <span className="text-[#D4AF55] uppercase tracking-wider font-semibold block mb-2">
+                    Day-by-Day Golf Schedule
+                  </span>
+                  {stayDates.map((day, idx) => {
+                    const plan = dailyGolfPlan[day.date];
+                    const course = GOLF_COURSES.find((c) => c.courseId === plan?.courseId);
+                    return (
+                      <div
+                        key={day.date}
+                        className="flex justify-between items-center text-xs py-1 border-b border-white/5 last:border-0"
+                      >
+                        <div>
+                          <span className="text-gray-400 font-medium">Day {idx + 1} ({day.formattedShort}):</span>{" "}
+                          <span className="text-white">
+                            {plan?.isRestDay
+                              ? "Rest Day (No Golf)"
+                              : course
+                              ? course.name
+                              : "No Course Selected"}
+                          </span>
+                        </div>
+                        {!plan?.isRestDay && plan?.timeSlot && (
+                          <span className="text-[#D4AF55] font-mono text-[11px] bg-white/5 px-2 py-0.5 rounded">
+                            {plan.timeSlot}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="pt-2 border-t border-white/5 flex justify-between text-xs text-gray-400">
+                    <span>Total Rounds:</span>
+                    <span className="text-white font-mono">{totalRounds} round(s)</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>Caddies:</span>
+                    <span className="text-white">{requestCaddies ? "Requested (€90/bag on day)" : "None"}</span>
+                  </div>
                 </div>
               </div>
+
+              {/* Whole Stay St Patrick's Notice if resting */}
+              {isStPatricksClosedForAllStayDays && (
+                <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-sm text-xs text-amber-300 flex items-center gap-2">
+                  <Info size={15} className="text-amber-400 shrink-0" />
+                  <span>Two-Championship Course Package applied (St Patrick&apos;s Links resting for agronomy on these dates).</span>
+                </div>
+              )}
 
               {/* Price Breakdown according to Scope F02 */}
               <div className="p-5 bg-[#121212] border border-[#DBB155]/30 rounded-sm space-y-3">
@@ -998,6 +1554,37 @@ export default function BespokePackage() {
                     <span className="text-white font-bold text-sm font-mono">{euro(pricing.balance)}</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Recommended Live Package Option (Opera + BRS Verified Match) */}
+              {searchResults?.recommended_packages && searchResults.recommended_packages.length > 0 && (
+                <div className="p-4 bg-gradient-to-r from-[#DBB155]/15 to-transparent border border-[#DBB155]/40 rounded-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-widest text-[#DBB155] font-semibold flex items-center gap-1.5">
+                      <Sparkles size={14} /> Recommended Live Itinerary (Opera + BRS Verified)
+                    </span>
+                    <span className="text-[11px] text-emerald-400 font-mono font-medium">Live Match</span>
+                  </div>
+                  <p className="text-sm font-serif font-bold text-white">
+                    {searchResults.recommended_packages[0].name}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Courses: {searchResults.recommended_packages[0].selected_courses.join(", ")}
+                  </p>
+                  <div className="text-xs text-gray-300 flex flex-wrap gap-4 pt-1 font-mono">
+                    <span>Package Total: <strong className="text-white">€{searchResults.recommended_packages[0].total_price}</strong></span>
+                    <span>25% Deposit: <strong className="text-[#DBB155]">€{searchResults.recommended_packages[0].deposit_amount}</strong></span>
+                    <span>75% Balance: <strong className="text-gray-300">€{searchResults.recommended_packages[0].balance_amount}</strong></span>
+                  </div>
+                </div>
+              )}
+
+              {/* Truthful Inventory Reservation Notice */}
+              <div className="p-3 bg-[#111] border border-white/5 rounded-sm flex items-center justify-between text-xs text-gray-400">
+                <span>Inventory Hold Status:</span>
+                <span className="text-gray-300 font-mono text-[11px]">
+                  reserves_inventory: false (No rooms or tee times held at search stage)
+                </span>
               </div>
 
               {/* Additional Requests Textarea */}

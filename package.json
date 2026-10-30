@@ -7,10 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test scripts/brs-checkout.test.cjs scripts/truthful-booking-status.test.cjs scripts/guest-booking-inputs.test.cjs",
+    "test": "node --test scripts/brs-checkout.test.cjs scripts/truthful-booking-status.test.cjs scripts/guest-booking-inputs.test.cjs scripts/stay-golf-search.test.cjs",
     "test:checkout": "node --test scripts/brs-checkout.test.cjs",
     "test:status": "node --test scripts/truthful-booking-status.test.cjs",
-    "test:inputs": "node --test scripts/guest-booking-inputs.test.cjs"
+    "test:inputs": "node --test scripts/guest-booking-inputs.test.cjs",
+    "test:search": "node --test scripts/stay-golf-search.test.cjs"
   },
   "dependencies": {
     "lucide-react": "^1.23.0",

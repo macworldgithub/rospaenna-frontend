@@ -17,7 +17,17 @@ import {
   RefreshCw,
   FileText,
   ShieldCheck,
+  LogOut,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
+import {
+  requestOtp,
+  verifyOtp,
+  fetchAuthenticatedBooking,
+  logoutMmbSession,
+  type MmbBookingSummary,
+} from "@/lib/mmbClient";
 
 interface MmbStatus {
   enabled: boolean;
@@ -30,12 +40,90 @@ export default function ManageBookingPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"dashboard" | "amend" | "rooming" | "requests">("dashboard");
 
-  // Sample guest inputs for lookup
-  const [bookingRef, setBookingRef] = useState("RSP-20261102-0D29CC");
+  // Guest authentication and session state
+  const [bookingRef, setBookingRef] = useState("RSP-20270514-TEST01");
   const [surname, setSurname] = useState("Golfer");
-  const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState("");
-  const [verified, setVerified] = useState(true); // default true for immediate preview
+  const [otpRequested, setOtpRequested] = useState(false);
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isRequestingOtp, setIsRequestingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [bookingData, setBookingData] = useState<MmbBookingSummary | null>(null);
+  const [verified, setVerified] = useState(false);
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown((c) => c - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
+
+  async function handleSendOtp() {
+    if (!bookingRef || bookingRef.trim().length < 5) {
+      setAuthError("Please enter a valid booking reference.");
+      return;
+    }
+    if (!surname || surname.trim().length < 1) {
+      setAuthError("Please enter the lead guest surname.");
+      return;
+    }
+    setAuthError(null);
+    setIsRequestingOtp(true);
+    try {
+      const res = await requestOtp(bookingRef, surname);
+      if (res.success) {
+        setOtpRequested(true);
+        setOtpMessage(res.message);
+        setCooldown(res.cooldown_seconds || 60);
+      } else {
+        setAuthError(res.message || "Failed to request code.");
+      }
+    } finally {
+      setIsRequestingOtp(false);
+    }
+  }
+
+  async function handleVerifyCode() {
+    if (!otpCode || !/^\d{6}$/.test(otpCode.trim())) {
+      setAuthError("Please enter a valid 6-digit numeric verification code.");
+      return;
+    }
+    setAuthError(null);
+    setIsVerifyingOtp(true);
+    try {
+      const res = await verifyOtp(bookingRef, otpCode);
+      if (res.success && res.session) {
+        const token = res.session.session_token;
+        setSessionToken(token);
+        const bookingRes = await fetchAuthenticatedBooking(bookingRef, token);
+        if (bookingRes.success && bookingRes.booking) {
+          setBookingData(bookingRes.booking);
+        }
+        setVerified(true);
+      } else {
+        setAuthError(res.error || "Invalid or expired verification code.");
+      }
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  }
+
+  async function handleLogout() {
+    if (sessionToken) {
+      await logoutMmbSession(sessionToken);
+    }
+    setSessionToken(null);
+    setBookingData(null);
+    setVerified(false);
+    setOtpRequested(false);
+    setOtpCode("");
+    setOtpMessage(null);
+    setAuthError(null);
+  }
 
   async function checkStatus() {
     setLoading(true);
@@ -191,44 +279,130 @@ export default function ManageBookingPage() {
 
             {/* Section 1: Guest Verification / Lookup Card */}
             <div className="border border-[#DBB155]/20 bg-[#0E0E0E] p-5 rounded-sm">
-              <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-[#DBB155] uppercase tracking-wider">
-                <ShieldCheck size={16} /> Stage 1: Identity &amp; Booking Lookup (Scope Ticket M03)
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block text-gray-400 mb-1">Booking Reference</label>
-                  <input
-                    type="text"
-                    value={bookingRef}
-                    onChange={(e) => setBookingRef(e.target.value)}
-                    className="w-full bg-[#161616] border border-white/10 p-2 text-white font-mono rounded-sm outline-none focus:border-[#DBB155]"
-                  />
+              <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
+                <div className="flex items-center gap-2 text-xs font-semibold text-[#DBB155] uppercase tracking-wider">
+                  <ShieldCheck size={16} /> Stage 1: Identity &amp; Booking Lookup (Scope Ticket M03)
                 </div>
-                <div>
-                  <label className="block text-gray-400 mb-1">Lead Guest Surname</label>
-                  <input
-                    type="text"
-                    value={surname}
-                    onChange={(e) => setSurname(e.target.value)}
-                    className="w-full bg-[#161616] border border-white/10 p-2 text-white rounded-sm outline-none focus:border-[#DBB155]"
-                  />
-                </div>
-                <div className="flex items-end">
+                {verified && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setOtpSent(true);
-                      setVerified(true);
-                    }}
-                    className="w-full py-2 bg-[#DBB155] hover:bg-[#c9a04a] text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-all cursor-pointer"
+                    onClick={handleLogout}
+                    className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 font-medium px-2.5 py-1 bg-red-950/30 border border-red-800/40 rounded transition-colors cursor-pointer"
                   >
-                    {otpSent ? "One-Time Code Sent" : "Send One-Time Code"}
+                    <LogOut size={13} /> Sign Out
                   </button>
-                </div>
+                )}
               </div>
-              <p className="text-[11px] text-gray-500 mt-2">
-                * Security requirement: One-time verification code is sent strictly to the booking email on record; caller cannot supply an arbitrary email.
-              </p>
+
+              {verified ? (
+                <div className="p-4 bg-emerald-950/20 border border-emerald-800/40 rounded-sm text-xs text-emerald-300 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                    <span>
+                      Authenticated guest session active for booking <b className="font-mono text-white">{bookingRef}</b> ({bookingData?.lead_guest_name || surname}).
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-gray-400 font-mono">Scoped Session Active</span>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <label className="block text-gray-400 mb-1">Booking Reference</label>
+                      <input
+                        type="text"
+                        value={bookingRef}
+                        onChange={(e) => setBookingRef(e.target.value)}
+                        placeholder="RSP-20270514-XXXXXX"
+                        className="w-full bg-[#161616] border border-white/10 p-2 text-white font-mono rounded-sm outline-none focus:border-[#DBB155]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-400 mb-1">Lead Guest Surname</label>
+                      <input
+                        type="text"
+                        value={surname}
+                        onChange={(e) => setSurname(e.target.value)}
+                        placeholder="e.g. Golfer"
+                        className="w-full bg-[#161616] border border-white/10 p-2 text-white rounded-sm outline-none focus:border-[#DBB155]"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={isRequestingOtp || cooldown > 0}
+                        className="w-full py-2 bg-[#DBB155] hover:bg-[#c9a04a] disabled:bg-gray-700 disabled:text-gray-400 text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        {isRequestingOtp ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" /> Sending...
+                          </>
+                        ) : cooldown > 0 ? (
+                          `Wait ${cooldown}s`
+                        ) : otpRequested ? (
+                          "Resend Code"
+                        ) : (
+                          "Send One-Time Code"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {otpRequested && (
+                    <div className="pt-2 border-t border-white/5">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs items-end">
+                        <div className="sm:col-span-2">
+                          <label className="block text-gray-400 mb-1">
+                            Enter 6-Digit Verification Code (Sent to email on file)
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={6}
+                            value={otpCode}
+                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                            placeholder="123456"
+                            className="w-full bg-[#161616] border border-white/10 p-2 text-white font-mono text-center tracking-[0.3em] font-bold text-base rounded-sm outline-none focus:border-[#DBB155]"
+                          />
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={handleVerifyCode}
+                            disabled={isVerifyingOtp || otpCode.length !== 6}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-400 text-white font-bold uppercase tracking-wider text-xs rounded-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            {isVerifyingOtp ? (
+                              <>
+                                <Loader2 size={13} className="animate-spin" /> Verifying...
+                              </>
+                            ) : (
+                              "Verify & Access Booking"
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {otpMessage && (
+                    <div className="p-3 bg-blue-950/20 border border-blue-800/40 rounded-sm text-xs text-blue-300">
+                      {otpMessage}
+                    </div>
+                  )}
+
+                  {authError && (
+                    <div className="p-3 bg-red-950/20 border border-red-800/40 rounded-sm text-xs text-red-300 flex items-center gap-2">
+                      <AlertCircle size={15} className="shrink-0 text-red-400" />
+                      <span>{authError}</span>
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-gray-500 mt-2">
+                    * Security requirement: One-time verification code is sent strictly to the booking email on record; caller cannot supply an arbitrary email.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Section 2: Tab Navigation for Stages 2 to 5 */}
@@ -286,38 +460,84 @@ export default function ManageBookingPage() {
                   <span className="text-[#DBB155] uppercase tracking-wider font-semibold block border-b border-white/5 pb-2">
                     Confirmed Stay &amp; Hotel Details
                   </span>
-                  <div className="flex justify-between"><span className="text-gray-400">Reference:</span> <span className="font-mono text-white">RSP-20261102-0D29CC</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">Dates:</span> <span className="text-white">03 Nov 2026 &rarr; 07 Nov 2026 (4 Nights)</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">Accommodations:</span> <span className="text-white">1x Classic Room (Twin Beds)</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">Breakfast:</span> <span className="text-emerald-400 font-medium">Included Daily</span></div>
-                  <div className="flex justify-between"><span className="text-gray-400">Opera Confirmation:</span> <span className="font-mono text-gray-300">OPR-8834921</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Reference:</span>{" "}
+                    <span className="font-mono text-white">{bookingData?.booking_reference || bookingRef}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Dates:</span>{" "}
+                    <span className="text-white">
+                      {bookingData?.stay
+                        ? `${bookingData.stay.arrival_date} → ${bookingData.stay.departure_date} (${bookingData.stay.nights} Nights)`
+                        : "03 Nov 2026 → 07 Nov 2026 (4 Nights)"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Accommodations:</span>{" "}
+                    <span className="text-white">
+                      {bookingData?.stay
+                        ? `${bookingData.stay.room_quantity}x ${bookingData.stay.room_category}`
+                        : "1x Classic Room (Twin Beds)"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Breakfast:</span>{" "}
+                    <span className="text-emerald-400 font-medium">Included Daily</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Status:</span>{" "}
+                    <span className="text-emerald-400 font-mono uppercase">{bookingData?.status || "Confirmed"}</span>
+                  </div>
                 </div>
 
                 <div className="bg-[#111] border border-white/5 p-5 rounded-sm space-y-3">
                   <span className="text-[#DBB155] uppercase tracking-wider font-semibold block border-b border-white/5 pb-2">
                     Championship Golf Rounds
                   </span>
-                  <div className="flex justify-between items-center text-[11px] py-1 border-b border-white/5">
-                    <div>
-                      <span className="text-white font-medium block">Old Tom Morris Links</span>
-                      <span className="text-gray-400">04 Nov 2026 &bull; 2 Players</span>
-                    </div>
-                    <span className="font-mono text-[#DBB155] bg-white/5 px-2 py-0.5 rounded">10:00</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[11px] py-1 border-b border-white/5">
-                    <div>
-                      <span className="text-white font-medium block">Sandy Hills Links</span>
-                      <span className="text-gray-400">05 Nov 2026 &bull; 2 Players</span>
-                    </div>
-                    <span className="font-mono text-[#DBB155] bg-white/5 px-2 py-0.5 rounded">10:30</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[11px] py-1">
-                    <div>
-                      <span className="text-white font-medium block">Old Tom Morris Links</span>
-                      <span className="text-gray-400">06 Nov 2026 &bull; 2 Players</span>
-                    </div>
-                    <span className="font-mono text-[#DBB155] bg-white/5 px-2 py-0.5 rounded">11:00</span>
-                  </div>
+                  {bookingData?.golf_rounds && bookingData.golf_rounds.length > 0 ? (
+                    bookingData.golf_rounds.map((round, idx) => (
+                      <div
+                        key={`${round.course_name}-${round.date}-${idx}`}
+                        className={`flex justify-between items-center text-[11px] py-1 ${
+                          idx < (bookingData.golf_rounds.length - 1) ? "border-b border-white/5" : ""
+                        }`}
+                      >
+                        <div>
+                          <span className="text-white font-medium block">{round.course_name}</span>
+                          <span className="text-gray-400">
+                            {round.date} &bull; {round.players} Players
+                          </span>
+                        </div>
+                        <span className="font-mono text-[#DBB155] bg-white/5 px-2 py-0.5 rounded">
+                          {round.time}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center text-[11px] py-1 border-b border-white/5">
+                        <div>
+                          <span className="text-white font-medium block">Old Tom Morris Links</span>
+                          <span className="text-gray-400">04 Nov 2026 &bull; 2 Players</span>
+                        </div>
+                        <span className="font-mono text-[#DBB155] bg-white/5 px-2 py-0.5 rounded">10:00</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px] py-1 border-b border-white/5">
+                        <div>
+                          <span className="text-white font-medium block">Sandy Hills Links</span>
+                          <span className="text-gray-400">05 Nov 2026 &bull; 2 Players</span>
+                        </div>
+                        <span className="font-mono text-[#DBB155] bg-white/5 px-2 py-0.5 rounded">10:30</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px] py-1">
+                        <div>
+                          <span className="text-white font-medium block">Old Tom Morris Links</span>
+                          <span className="text-gray-400">06 Nov 2026 &bull; 2 Players</span>
+                        </div>
+                        <span className="font-mono text-[#DBB155] bg-white/5 px-2 py-0.5 rounded">11:00</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Financial Position */}
@@ -329,19 +549,27 @@ export default function ManageBookingPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                     <div className="bg-[#181818] p-3 rounded-sm border border-white/5">
                       <span className="text-gray-400 text-[11px] block mb-1">Total Package Price</span>
-                      <span className="text-white font-mono font-bold text-base">€1,240.00</span>
+                      <span className="text-white font-mono font-bold text-base">
+                        €{bookingData?.financials ? bookingData.financials.total_amount : "1,240.00"}
+                      </span>
                     </div>
                     <div className="bg-[#181818] p-3 rounded-sm border border-white/5">
                       <span className="text-gray-400 text-[11px] block mb-1">25% Deposit Paid</span>
-                      <span className="text-emerald-400 font-mono font-bold text-base">€310.00</span>
+                      <span className="text-emerald-400 font-mono font-bold text-base">
+                        €{bookingData?.financials ? bookingData.financials.deposit_paid : "310.00"}
+                      </span>
                     </div>
                     <div className="bg-[#181818] p-3 rounded-sm border border-white/5">
                       <span className="text-gray-400 text-[11px] block mb-1">75% Balance Due</span>
-                      <span className="text-[#DBB155] font-mono font-bold text-base">€930.00</span>
+                      <span className="text-[#DBB155] font-mono font-bold text-base">
+                        €{bookingData?.financials ? bookingData.financials.balance_due : "930.00"}
+                      </span>
                     </div>
                     <div className="bg-[#181818] p-3 rounded-sm border border-white/5">
-                      <span className="text-gray-400 text-[11px] block mb-1">Due Date (42 Days)</span>
-                      <span className="text-gray-300 font-mono text-xs font-semibold">22 Sep 2026</span>
+                      <span className="text-gray-400 text-[11px] block mb-1">Payment Status</span>
+                      <span className="text-emerald-400 font-mono text-xs font-semibold uppercase">
+                        {bookingData?.financials ? bookingData.financials.payment_status : "deposit_paid"}
+                      </span>
                     </div>
                   </div>
                 </div>

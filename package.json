@@ -3,15 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3030",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3030",
     "lint": "eslint",
-    "test": "node --test scripts/brs-checkout.test.cjs scripts/truthful-booking-status.test.cjs scripts/guest-booking-inputs.test.cjs scripts/stay-golf-search.test.cjs",
+    "test": "node --test scripts/brs-checkout.test.cjs scripts/truthful-booking-status.test.cjs scripts/guest-booking-inputs.test.cjs scripts/stay-golf-search.test.cjs scripts/packages-n04-n05.test.cjs scripts/mmb-gate.test.cjs",
     "test:checkout": "node --test scripts/brs-checkout.test.cjs",
     "test:status": "node --test scripts/truthful-booking-status.test.cjs",
     "test:inputs": "node --test scripts/guest-booking-inputs.test.cjs",
-    "test:search": "node --test scripts/stay-golf-search.test.cjs"
+    "test:search": "node --test scripts/stay-golf-search.test.cjs",
+    "test:packages": "node --test scripts/packages-n04-n05.test.cjs",
+    "test:mmb": "node --test scripts/mmb-gate.test.cjs"
   },
   "dependencies": {
     "lucide-react": "^1.23.0",

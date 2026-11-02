@@ -20,6 +20,8 @@ export interface PackageQuoteRequest {
   rooms: RoomSelectionQuoteRequest[];
   golf_rounds: GolfRoundQuoteRequest[];
   existing_booking_intent_id?: string | null;
+  residence_country?: string | null;
+  has_golf_ireland_index?: boolean;
 }
 
 export interface ItemizedRoomQuote {
@@ -42,6 +44,7 @@ export interface ItemizedGolfRoundQuote {
   rate_per_player: string;
   subtotal: string;
   available_slots: number;
+  rate_basis?: string;
 }
 
 export interface AmendmentPaymentSummary {
@@ -69,11 +72,54 @@ export interface PackageQuoteResponse {
   deposit_amount: string;
   balance_amount: string;
   balance_due_date: string;
+  terms_version?: string;
+  deposit_percent?: number;
+  balance_percent?: number;
+  rate_basis_summary?: string;
+  is_golf_ireland_eligible?: boolean;
   amendment_summary?: AmendmentPaymentSummary | null;
   reserves_inventory: boolean;
   freshness_ttl_seconds: number;
+  expires_at?: string;
   created_at: string;
   errors: string[];
+}
+
+export interface PackagePaymentLinkRequest {
+  quote_id: string;
+  lead_first_name: string;
+  lead_last_name: string;
+  lead_email: string;
+  lead_phone: string;
+  residence_country?: string;
+  accepted_terms: boolean;
+  special_requests?: string | null;
+}
+
+export interface PackagePaymentLinkResponse {
+  payment_id: string;
+  booking_intent_id: string;
+  booking_reference: string;
+  quote_id: string;
+  rules_version: string;
+  amount: string;
+  currency: string;
+  status: "draft" | "unpaid" | "pending" | "verified_paid" | "failed" | "expired";
+  payment_url: string;
+  expires_at: string;
+  reminder_at: string;
+  reserves_inventory: boolean;
+  created_at: string;
+}
+
+export interface PaymentCallbackRequest {
+  payment_id: string;
+  transaction_id: string;
+  status: "paid" | "completed" | "failed" | "cancelled" | "expired";
+  amount: string;
+  currency?: string;
+  timestamp: number;
+  provider_signature: string;
 }
 
 export interface MinimumRoundsRule {
@@ -175,7 +221,7 @@ export interface PackageSearchResponse {
 }
 
 /**
- * Fetch a live, server-verified Stay & Play package quote from the backend pricing engine.
+ * Server functions calling the FastAPI backend directly.
  */
 export async function fetchPackageQuote(
   request: PackageQuoteRequest
@@ -183,25 +229,40 @@ export async function fetchPackageQuote(
   return bookingBackend<PackageQuoteResponse>("/packages/quote", request, {}, "POST");
 }
 
-/**
- * Perform a live search combining Opera room availability and BRS tee times across all courses.
- */
+export async function fetchPackageQuoteById(
+  quoteId: string
+): Promise<PackageQuoteResponse> {
+  return bookingBackend<PackageQuoteResponse>(`/packages/quote/${encodeURIComponent(quoteId)}`, undefined, {}, "GET");
+}
+
+export async function createPackagePaymentLink(
+  request: PackagePaymentLinkRequest
+): Promise<PackagePaymentLinkResponse> {
+  return bookingBackend<PackagePaymentLinkResponse>("/packages/payment-link", request, {}, "POST");
+}
+
+export async function fetchPaymentRecord(
+  paymentId: string
+): Promise<PackagePaymentLinkResponse> {
+  return bookingBackend<PackagePaymentLinkResponse>(`/packages/payments/${encodeURIComponent(paymentId)}`, undefined, {}, "GET");
+}
+
+export async function submitPaymentCallback(
+  request: PaymentCallbackRequest
+): Promise<PackagePaymentLinkResponse> {
+  return bookingBackend<PackagePaymentLinkResponse>("/packages/payment-callback", request, {}, "POST");
+}
+
 export async function searchStayAndGolf(
   request: PackageSearchRequest
 ): Promise<PackageSearchResponse> {
   return bookingBackend<PackageSearchResponse>("/packages/search", request, {}, "POST");
 }
 
-/**
- * Fetch active package rules configuration from the backend.
- */
 export async function fetchPackageRules(): Promise<PackageRulesConfig> {
   return bookingBackend<PackageRulesConfig>("/packages/rules", undefined, {}, "GET");
 }
 
-/**
- * Update package rules configuration with an immutable audit record.
- */
 export async function updatePackageRules(
   request: UpdatePackageRulesRequest
 ): Promise<PackageRulesConfig> {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Calendar,
   Users,
@@ -19,8 +19,17 @@ import {
   Clock,
   Lock,
   Coffee,
+  CreditCard,
+  RefreshCw,
+  ExternalLink,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
-import type { PackageSearchResponse } from "@/lib/packagesClient";
+import type {
+  PackageSearchResponse,
+  PackageQuoteResponse,
+  PackagePaymentLinkResponse,
+} from "@/lib/packagesClient";
 
 const steps = [
   { title: "Dates", icon: Calendar },
@@ -108,6 +117,21 @@ export default function BespokePackage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<PackageSearchResponse | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Live Verified Quote & Terms Acceptance (Ticket N04)
+  const [liveQuote, setLiveQuote] = useState<PackageQuoteResponse | null>(null);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteRemainingSeconds, setQuoteRemainingSeconds] = useState(120);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
+  // Scoped 25% Deposit Payment Link & Lifecycle (Ticket N05)
+  const [paymentLinkRecord, setPaymentLinkRecord] = useState<PackagePaymentLinkResponse | null>(null);
+  const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
+  const [paymentLinkError, setPaymentLinkError] = useState<string | null>(null);
+  const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
+  const [simulationSuccess, setSimulationSuccess] = useState<string | null>(null);
 
   // Restore inputs from sessionStorage on mount
   useEffect(() => {
@@ -555,6 +579,191 @@ export default function BespokePackage() {
     isGolfIrelandEligible,
   ]);
 
+  // Live Quote Fetcher (Ticket N04)
+  const fetchLiveQuote = useCallback(async () => {
+    if (!hasValidArrival || !departureDate) return;
+    setIsLoadingQuote(true);
+    setQuoteError(null);
+
+    // Build golf rounds payload from dailyGolfPlan
+    const roundsPayload = stayDates
+      .filter((d) => {
+        const plan = dailyGolfPlan[d.date];
+        return plan && !plan.isRestDay && plan.courseId;
+      })
+      .map((d) => {
+        const plan = dailyGolfPlan[d.date]!;
+        return {
+          course_id: plan.courseId!,
+          date: d.date,
+          time: plan.timeSlot || "10:00",
+          players: groupSize,
+        };
+      });
+
+    try {
+      const res = await fetch("/api/packages/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          arrival_date: arrivalDate,
+          departure_date: departureDate,
+          rooms: [
+            {
+              room_category: roomCategory,
+              room_quantity: roomCount,
+              adults: groupSize,
+              children: 0,
+            },
+          ],
+          golf_rounds: roundsPayload,
+          residence_country: residenceCountry,
+          has_golf_ireland_index: hasGolfIrelandIndex,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Quote calculation failed with HTTP ${res.status}`);
+      }
+
+      const data: PackageQuoteResponse = await res.json();
+      setLiveQuote(data);
+      setQuoteRemainingSeconds(data.freshness_ttl_seconds || 120);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Could not retrieve live verified quote.";
+      setQuoteError(message);
+    } finally {
+      setIsLoadingQuote(false);
+    }
+  }, [
+    hasValidArrival,
+    departureDate,
+    arrivalDate,
+    roomCategory,
+    roomCount,
+    groupSize,
+    residenceCountry,
+    hasGolfIrelandIndex,
+    stayDates,
+    dailyGolfPlan,
+  ]);
+
+  // Quote freshness countdown timer (Ticket N04: 120s TTL)
+  useEffect(() => {
+    if (!liveQuote || quoteRemainingSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setQuoteRemainingSeconds((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [liveQuote, quoteRemainingSeconds]);
+
+  // Fetch live quote automatically when reaching Step 4
+  useEffect(() => {
+    if (currentStep === 4) {
+      fetchLiveQuote();
+    }
+  }, [currentStep, fetchLiveQuote]);
+
+  // Create Scoped 25% Deposit Payment Link (Ticket N05)
+  const handleCreatePaymentLink = async () => {
+    if (!acceptedTerms) {
+      setPaymentLinkError("Please accept the Terms & Conditions before generating your payment link.");
+      return;
+    }
+    if (!liveQuote) {
+      await fetchLiveQuote();
+      return;
+    }
+    if (liveQuote.status !== "available") {
+      setPaymentLinkError(
+        liveQuote.errors && liveQuote.errors.length > 0
+          ? liveQuote.errors.join("; ")
+          : "The selected itinerary is not currently available for booking."
+      );
+      return;
+    }
+    setIsCreatingPaymentLink(true);
+    setPaymentLinkError(null);
+
+    try {
+      const res = await fetch("/api/packages/payment-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quote_id: liveQuote.quote_id,
+          lead_first_name: leadFirstName,
+          lead_last_name: leadLastName,
+          lead_email: leadEmail,
+          lead_phone: leadPhone,
+          residence_country: residenceCountry,
+          accepted_terms: true,
+          special_requests: additionalRequests || null,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Payment link generation failed with HTTP ${res.status}`);
+      }
+
+      const data: PackagePaymentLinkResponse = await res.json();
+      setPaymentLinkRecord(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to generate payment link.";
+      setPaymentLinkError(message);
+    } finally {
+      setIsCreatingPaymentLink(false);
+    }
+  };
+
+  // Refresh payment status from backend
+  const handleRefreshPaymentStatus = async (paymentId: string) => {
+    try {
+      const res = await fetch(`/api/packages/payments/${encodeURIComponent(paymentId)}`);
+      if (res.ok) {
+        const data: PackagePaymentLinkResponse = await res.json();
+        setPaymentLinkRecord(data);
+      }
+    } catch {
+      // Ignore background refresh errors
+    }
+  };
+
+  // Sandbox simulation of verified guest payment (Ticket N05)
+  const handleSimulateSandboxPayment = async () => {
+    if (!paymentLinkRecord) return;
+    setIsSimulatingPayment(true);
+    setSimulationSuccess(null);
+    setPaymentLinkError(null);
+
+    try {
+      const res = await fetch("/api/packages/payment-callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payment_id: paymentLinkRecord.payment_id,
+          status: "paid",
+          amount: paymentLinkRecord.amount,
+          currency: paymentLinkRecord.currency,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Sandbox payment simulation failed.");
+      }
+
+      await handleRefreshPaymentStatus(paymentLinkRecord.payment_id);
+      setSimulationSuccess("Payment verified! Deposit has been credited to your reservation.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Payment simulation failed.";
+      setPaymentLinkError(message);
+    } finally {
+      setIsSimulatingPayment(false);
+    }
+  };
+
   // Step Navigation Handlers
   const nextStep = () => {
     if (currentStep === 0 && !hasValidArrival) return;
@@ -566,13 +775,15 @@ export default function BespokePackage() {
 
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
 
-  // Truthful Booking Intent Handler (N01, N02, F03 compliant: no simulated completed reservations)
+  // Truthful Booking Intent Handler fallback
   const handleSubmitInquiry = async () => {
+    if (liveQuote && acceptedTerms) {
+      await handleCreatePaymentLink();
+      return;
+    }
     setIsSubmitting(true);
     try {
       const refCode = `PKG-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      // Simulate registration of intent while Prommt payment credentials are on hold
       await new Promise((r) => setTimeout(r, 600));
 
       setBookingIntentResult({
@@ -587,6 +798,208 @@ export default function BespokePackage() {
       setIsSubmitting(false);
     }
   };
+
+  // Ticket N05: Live Deposit Payment & Lifecycle Screen
+  if (paymentLinkRecord) {
+    const isPaid = paymentLinkRecord.status === "verified_paid";
+    const isExpired = paymentLinkRecord.status === "expired";
+    const expiryFormatted = new Date(paymentLinkRecord.expires_at).toLocaleString("en-IE", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    const reminderFormatted = new Date(paymentLinkRecord.reminder_at).toLocaleDateString("en-IE", {
+      dateStyle: "medium",
+    });
+
+    return (
+      <section className="bg-[#050505] py-20 px-4 sm:px-6 min-h-[60vh] flex items-center justify-center">
+        <div className="max-w-2xl w-full mx-auto border border-[#DBB155]/40 bg-[#0A0A0A] p-8 sm:p-10 rounded-sm text-center">
+          <div
+            className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-6 ${
+              isPaid
+                ? "bg-emerald-950/60 border border-emerald-500/50 text-emerald-400"
+                : isExpired
+                ? "bg-red-950/60 border border-red-500/50 text-red-400"
+                : "bg-[#DBB155]/15 border border-[#DBB155]/30 text-[#DBB155]"
+            }`}
+          >
+            {isPaid ? <CheckCircle2 size={32} /> : isExpired ? <XCircle size={32} /> : <CreditCard size={30} />}
+          </div>
+
+          <p
+            className={`uppercase tracking-[0.25em] text-[10px] font-semibold mb-2 ${
+              isPaid ? "text-emerald-400" : isExpired ? "text-red-400" : "text-[#DBB155]"
+            }`}
+          >
+            {isPaid ? "Booking Secured & Deposit Verified" : isExpired ? "Payment Link Expired" : "Deposit Payment Link Created"}
+          </p>
+          <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white mb-2">
+            {isPaid ? "Reservation Confirmed" : "Stay & Play Deposit Payment"}
+          </h2>
+          <p className="text-xs text-gray-400 mb-6">
+            {isPaid
+              ? "Your 25% non-refundable deposit has been verified. Welcome to Rosapenna!"
+              : "Review your payment link details below to complete your 25% non-refundable deposit."}
+          </p>
+
+          {/* Details Card */}
+          <div className="bg-[#121212] border border-[#DBB155]/20 p-5 rounded-sm my-4 text-left space-y-3">
+            <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+              <span className="text-gray-400">Booking Reference:</span>
+              <span className="font-mono text-[#DBB155] font-bold text-base">{paymentLinkRecord.booking_reference}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+              <span className="text-gray-400">Payment ID:</span>
+              <span className="font-mono text-gray-300 text-xs">{paymentLinkRecord.payment_id}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+              <span className="text-gray-400">Payment Status:</span>
+              <span
+                className={`font-mono text-xs px-2 py-0.5 rounded font-bold uppercase ${
+                  isPaid
+                    ? "bg-emerald-950 text-emerald-300 border border-emerald-700/50"
+                    : isExpired
+                    ? "bg-red-950 text-red-300 border border-red-700/50"
+                    : "bg-amber-950 text-amber-300 border border-amber-700/50"
+                }`}
+              >
+                {paymentLinkRecord.status}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+              <span className="text-gray-400">Lead Guest:</span>
+              <span className="text-white">{leadFirstName} {leadLastName} ({leadEmail})</span>
+            </div>
+            <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+              <span className="text-gray-400">Dates:</span>
+              <span className="text-white">{arrivalDate} to {departureDate} ({nights} nights)</span>
+            </div>
+            <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+              <span className="text-gray-400">Total Package Value:</span>
+              <span className="text-white font-semibold">€{liveQuote?.total_package_price || pricing.total}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+              <span className="text-gray-400">25% Non-Refundable Deposit:</span>
+              <span className="text-[#DBB155] font-bold text-base">€{paymentLinkRecord.amount}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-400">75% Balance Due:</span>
+              <span className="text-white">
+                €{liveQuote?.balance_amount || pricing.balance} (due {liveQuote?.balance_due_date || balanceDueDate})
+              </span>
+            </div>
+          </div>
+
+          {/* Ticket N05 Lifecycle Tracking Box */}
+          {!isPaid && !isExpired && (
+            <div className="border border-[#DBB155]/20 bg-[#16130B] p-4 rounded-sm text-left text-xs leading-relaxed space-y-2 mb-6">
+              <div className="flex items-center gap-2 font-semibold text-[#DBB155]">
+                <Clock size={15} /> Payment Link Lifecycle &amp; Policies
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-300 pt-1 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <Calendar size={13} className="text-[#DBB155]" />
+                  <span>Link Expiry: <strong className="text-white">{expiryFormatted}</strong> (7 days)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Mail size={13} className="text-[#DBB155]" />
+                  <span>Reminder: <strong className="text-white">{reminderFormatted}</strong> (Day 5)</span>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-white/5 text-[11px] text-amber-200/90 flex items-start gap-2">
+                <ShieldCheck size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Inventory Invariant:</strong> <code>reserves_inventory: false</code>. Rooms and tee sheets remain open to other guests until this deposit payment is verified.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {isPaid && (
+            <div className="border border-emerald-800/40 bg-emerald-950/20 p-4 rounded-sm text-left text-xs leading-relaxed text-emerald-200 mb-6 space-y-2">
+              <div className="flex items-center gap-2 font-semibold text-emerald-300">
+                <CheckCircle2 size={16} /> Booking Inventory Secured
+              </div>
+              <p>
+                Deposit payment has been verified by the payment gateway. Your hotel rooms and championship golf rounds are now secured.
+              </p>
+              <p className="text-[11px] text-emerald-300/80">
+                The remaining 75% balance of <strong>€{liveQuote?.balance_amount || pricing.balance}</strong> will be requested 6 weeks prior to your arrival date ({liveQuote?.balance_due_date || balanceDueDate}).
+              </p>
+            </div>
+          )}
+
+          {simulationSuccess && (
+            <div className="mb-4 p-3 bg-emerald-950/50 border border-emerald-600/50 rounded text-xs text-emerald-300 flex items-center gap-2">
+              <CheckCircle2 size={15} /> {simulationSuccess}
+            </div>
+          )}
+
+          {paymentLinkError && (
+            <div className="mb-4 p-3 bg-red-950/50 border border-red-600/50 rounded text-xs text-red-300 flex items-center gap-2">
+              <AlertTriangle size={15} /> {paymentLinkError}
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="space-y-3 pt-2">
+            {!isPaid && !isExpired && (
+              <>
+                <a
+                  href={paymentLinkRecord.payment_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-[#DBB155] hover:bg-[#c9a04a] text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-all shadow-md cursor-pointer"
+                >
+                  Open Prommt Payment Page (€{paymentLinkRecord.amount}) <ExternalLink size={15} />
+                </a>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleRefreshPaymentStatus(paymentLinkRecord.payment_id)}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-200 text-xs font-semibold rounded-sm border border-white/10 transition-colors"
+                  >
+                    <RefreshCw size={14} /> Check Payment Status
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSimulateSandboxPayment}
+                    disabled={isSimulatingPayment}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-950/40 hover:bg-amber-900/50 text-[#DBB155] text-xs font-semibold rounded-sm border border-[#DBB155]/40 transition-colors disabled:opacity-50"
+                  >
+                    {isSimulatingPayment ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" /> Verifying...
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard size={14} /> Simulate Deposit Payment (Sandbox)
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+
+            <div className="pt-4 border-t border-white/5 flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentLinkRecord(null);
+                  setSimulationSuccess(null);
+                }}
+                className="text-xs uppercase tracking-widest text-gray-400 hover:text-white underline cursor-pointer"
+              >
+                &larr; Return to Package Itinerary Review
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   // Truthful Confirmation Screen (Pending Payment State)
   if (bookingIntentResult) {
@@ -1460,15 +1873,111 @@ export default function BespokePackage() {
             </div>
           )}
 
-          {/* STEP 4: REVIEW & INQUIRY */}
+          {/* STEP 4: REVIEW & INQUIRY (Ticket N04) */}
           {currentStep === 4 && (
             <div className="space-y-6">
-              <div className="border border-[#5d4a20] bg-[#19140C] p-4 flex gap-3 items-start text-xs text-[#E2BE69] leading-relaxed">
-                <ShieldCheck size={18} className="text-[#D4AF55] mt-0.5 shrink-0" />
-                <p>
-                  <strong>Verified Review:</strong> Review your bespoke itinerary below. When submitted, your details will be registered with our reservations team. No charges are applied until payment links are confirmed.
-                </p>
-              </div>
+              {/* Live Pricing Engine & Quote Status Header */}
+              {isLoadingQuote ? (
+                <div className="border border-[#DBB155]/30 bg-[#16130B] p-4 rounded-sm flex items-center justify-center gap-3 text-xs text-gray-300">
+                  <Loader2 size={16} className="animate-spin text-[#DBB155]" />
+                  <span>Calculating live verified rates from Opera PMS and BRS Golf...</span>
+                </div>
+              ) : quoteError ? (
+                <div className="border border-red-800/40 bg-red-950/30 p-4 rounded-sm flex items-center justify-between text-xs text-red-300">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={16} className="text-red-400 shrink-0" />
+                    <span>{quoteError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchLiveQuote}
+                    className="px-3 py-1 bg-red-800/40 hover:bg-red-800/60 rounded text-[11px] font-medium text-white flex items-center gap-1.5"
+                  >
+                    <RefreshCw size={12} /> Retry
+                  </button>
+                </div>
+              ) : liveQuote ? (
+                liveQuote.status !== "available" ? (
+                  <div className="border border-red-800/40 bg-red-950/30 p-4 rounded-sm space-y-2 text-xs">
+                    <div className="flex items-center justify-between border-b border-red-800/30 pb-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle size={16} className="text-red-400 shrink-0" />
+                        <span className="font-semibold text-red-200">Selected Itinerary Unavailable</span>
+                        <span className="font-mono text-[11px] text-gray-400">({liveQuote.quote_id})</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={fetchLiveQuote}
+                        className="px-3 py-1 bg-red-800/40 hover:bg-red-800/60 rounded text-[11px] font-medium text-white flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw size={12} /> Reprice
+                      </button>
+                    </div>
+                    {liveQuote.errors && liveQuote.errors.length > 0 && (
+                      <ul className="list-disc list-inside text-red-300 text-xs space-y-1 pt-1">
+                        {liveQuote.errors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : (
+                  <div className="border border-[#DBB155]/40 bg-[#141007] p-4 rounded-sm space-y-2 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck size={16} className="text-[#DBB155]" />
+                        <span className="font-semibold text-white">Live Verified Package Quote</span>
+                        <span className="font-mono text-[11px] text-gray-400">({liveQuote.quote_id})</span>
+                      </div>
+
+                      {/* Freshness Countdown Timer */}
+                      <div
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono ${
+                          quoteRemainingSeconds > 30
+                            ? "bg-white/5 text-[#DBB155] border border-[#DBB155]/30"
+                            : quoteRemainingSeconds > 0
+                            ? "bg-amber-950/60 text-amber-300 border border-amber-600/50 animate-pulse"
+                            : "bg-red-950/70 text-red-300 border border-red-600/60 font-bold"
+                        }`}
+                      >
+                        <Clock size={12} />
+                        {quoteRemainingSeconds > 0 ? (
+                          <span>Quote valid: {quoteRemainingSeconds}s</span>
+                        ) : (
+                          <span>Quote expired (TTL exceeded)</span>
+                        )}
+                        {quoteRemainingSeconds <= 0 && (
+                          <button
+                            type="button"
+                            onClick={fetchLiveQuote}
+                            className="ml-1.5 underline text-[#DBB155] hover:text-white flex items-center gap-1 cursor-pointer"
+                          >
+                            <RefreshCw size={11} /> Reprice
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-gray-300">
+                      <div className="flex items-center gap-2">
+                        <span>Rate Basis:</span>
+                        <span
+                          className={`font-semibold px-2 py-0.5 rounded ${
+                            liveQuote.is_golf_ireland_eligible
+                              ? "bg-emerald-950 text-emerald-300 border border-emerald-700/50"
+                              : "bg-white/5 text-gray-200 border border-white/10"
+                          }`}
+                        >
+                          {liveQuote.rate_basis_summary}
+                        </span>
+                      </div>
+                      <div className="text-gray-400 font-mono text-[10px]">
+                        Rules: {liveQuote.rules_version} | Terms: {liveQuote.terms_version || "terms-v1-20261014"}
+                      </div>
+                    </div>
+                  </div>
+                )
+              ) : null}
 
               {/* Itinerary Summary Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -1478,6 +1987,7 @@ export default function BespokePackage() {
                   <div className="flex justify-between"><span className="text-gray-400">Departure:</span> <span className="text-white">{departureDate} ({nights} nights)</span></div>
                   <div className="flex justify-between"><span className="text-gray-400">Party Size:</span> <span className="text-white">{groupSize} Guest(s)</span></div>
                   <div className="flex justify-between"><span className="text-gray-400">Room(s):</span> <span className="text-white">{roomCount}x {roomCategory} ({roomBedType})</span></div>
+                  <div className="flex justify-between"><span className="text-gray-400">Breakfast:</span> <span className="text-emerald-400">Full Irish Included Daily</span></div>
                 </div>
 
                 <div className="p-4 bg-[#111] border border-white/5 rounded-sm space-y-2.5">
@@ -1487,6 +1997,8 @@ export default function BespokePackage() {
                   {stayDates.map((day, idx) => {
                     const plan = dailyGolfPlan[day.date];
                     const course = GOLF_COURSES.find((c) => c.courseId === plan?.courseId);
+                    const quoteRound = liveQuote?.itemized_golf.find((g) => g.date === day.date);
+
                     return (
                       <div
                         key={day.date}
@@ -1501,6 +2013,11 @@ export default function BespokePackage() {
                               ? course.name
                               : "No Course Selected"}
                           </span>
+                          {quoteRound?.rate_basis && (
+                            <span className="block text-[10px] text-gray-400">
+                              {quoteRound.rate_basis} (€{quoteRound.rate_per_player}/player)
+                            </span>
+                          )}
                         </div>
                         {!plan?.isRestDay && plan?.timeSlot && (
                           <span className="text-[#D4AF55] font-mono text-[11px] bg-white/5 px-2 py-0.5 rounded">
@@ -1529,65 +2046,60 @@ export default function BespokePackage() {
                 </div>
               )}
 
-              {/* Price Breakdown according to Scope F02 */}
+              {/* Price Breakdown from verified quote */}
               <div className="p-5 bg-[#121212] border border-[#DBB155]/30 rounded-sm space-y-3">
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-400">Accommodation Subtotal ({nights} nights, {roomCount} room(s)):</span>
-                  <span className="text-white font-mono">{euro(pricing.roomCost)}</span>
+                  <span className="text-white font-mono">
+                    €{liveQuote && liveQuote.status === "available" ? liveQuote.total_rooms_price : pricing.roomCost.toFixed(2)}
+                  </span>
                 </div>
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-400">Championship Golf Subtotal ({totalRounds} rounds x {groupSize} players):</span>
-                  <span className="text-white font-mono">{euro(pricing.totalGolfCost)}</span>
+                  <span className="text-white font-mono">
+                    €{liveQuote && liveQuote.status === "available" ? liveQuote.total_golf_price : pricing.totalGolfCost.toFixed(2)}
+                  </span>
                 </div>
-                <div className="border-t border-white/10 pt-2 flex justify-between text-base font-bold">
+                <div className="border-t border-white/10 pt-2 flex justify-between items-center text-base font-bold">
                   <span className="text-white">Total Package Price:</span>
-                  <span className="text-[#D4AF55] font-mono">{euro(pricing.total)}</span>
+                  <span className="text-[#D4AF55] font-mono">
+                    €{liveQuote && liveQuote.status === "available" ? liveQuote.total_package_price : pricing.total.toFixed(2)}
+                  </span>
                 </div>
 
                 <div className="pt-2 border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="bg-[#181818] p-3 rounded-sm">
+                  <div className="bg-[#181818] p-3 rounded-sm border border-white/5">
                     <span className="text-gray-400 block mb-1">25% Non-Refundable Deposit:</span>
-                    <span className="text-white font-bold text-sm font-mono">{euro(pricing.deposit)}</span>
-                  </div>
-                  <div className="bg-[#181818] p-3 rounded-sm">
-                    <span className="text-gray-400 block mb-1">75% Balance Due ({balanceDueDate}):</span>
-                    <span className="text-white font-bold text-sm font-mono">{euro(pricing.balance)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Recommended Live Package Option (Opera + BRS Verified Match) */}
-              {searchResults?.recommended_packages && searchResults.recommended_packages.length > 0 && (
-                <div className="p-4 bg-gradient-to-r from-[#DBB155]/15 to-transparent border border-[#DBB155]/40 rounded-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-widest text-[#DBB155] font-semibold flex items-center gap-1.5">
-                      <Sparkles size={14} /> Recommended Live Itinerary (Opera + BRS Verified)
+                    <span className="text-[#DBB155] font-bold text-sm font-mono">
+                      €{liveQuote && liveQuote.status === "available" ? liveQuote.deposit_amount : pricing.deposit.toFixed(2)}
                     </span>
-                    <span className="text-[11px] text-emerald-400 font-mono font-medium">Live Match</span>
                   </div>
-                  <p className="text-sm font-serif font-bold text-white">
-                    {searchResults.recommended_packages[0].name}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Courses: {searchResults.recommended_packages[0].selected_courses.join(", ")}
-                  </p>
-                  <div className="text-xs text-gray-300 flex flex-wrap gap-4 pt-1 font-mono">
-                    <span>Package Total: <strong className="text-white">€{searchResults.recommended_packages[0].total_price}</strong></span>
-                    <span>25% Deposit: <strong className="text-[#DBB155]">€{searchResults.recommended_packages[0].deposit_amount}</strong></span>
-                    <span>75% Balance: <strong className="text-gray-300">€{searchResults.recommended_packages[0].balance_amount}</strong></span>
+                  <div className="bg-[#181818] p-3 rounded-sm border border-white/5">
+                    <span className="text-gray-400 block mb-1">
+                      75% Balance Due ({liveQuote && liveQuote.status === "available" ? liveQuote.balance_due_date : balanceDueDate}):
+                    </span>
+                    <span className="text-white font-bold text-sm font-mono">
+                      €{liveQuote && liveQuote.status === "available" ? liveQuote.balance_amount : pricing.balance.toFixed(2)}
+                    </span>
                   </div>
                 </div>
-              )}
+
+                {liveQuote && liveQuote.status !== "available" && (
+                  <p className="text-[11px] text-amber-300/80 pt-1 border-t border-white/5">
+                    * Estimated standard rates shown. Real-time availability check indicated unavailable slots or unmet package criteria.
+                  </p>
+                )}
+              </div>
 
               {/* Truthful Inventory Reservation Notice */}
               <div className="p-3 bg-[#111] border border-white/5 rounded-sm flex items-center justify-between text-xs text-gray-400">
                 <span>Inventory Hold Status:</span>
                 <span className="text-gray-300 font-mono text-[11px]">
-                  reserves_inventory: false (No rooms or tee times held at search stage)
+                  reserves_inventory: false (No rooms or tee times held prior to deposit payment verification)
                 </span>
               </div>
 
-              {/* Additional Requests Textarea */}
+              {/* Special Requests */}
               <div>
                 <label className="block text-xs text-gray-400 mb-2">Special Requests or Preferences (Optional)</label>
                 <textarea
@@ -1597,6 +2109,58 @@ export default function BespokePackage() {
                   onChange={(e) => setAdditionalRequests(e.target.value)}
                   className="w-full bg-[#111] border border-[#222] p-3 text-white text-xs outline-none focus:border-[#D4AF55] rounded-sm resize-none"
                 />
+              </div>
+
+              {/* Ticket N04: Mandatory Terms & Conditions Acceptance */}
+              <div className="p-4 bg-[#111] border border-[#DBB155]/20 rounded-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wider font-semibold text-[#DBB155] flex items-center gap-1.5">
+                    <ShieldCheck size={15} /> Package Terms &amp; Conditions ({liveQuote?.terms_version || "terms-v1-20261014"})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowTermsModal(!showTermsModal)}
+                    className="text-[11px] text-gray-400 hover:text-white underline cursor-pointer"
+                  >
+                    {showTermsModal ? "Hide Summary" : "View Full Terms"}
+                  </button>
+                </div>
+
+                {showTermsModal && (
+                  <div className="text-xs text-gray-400 bg-black/50 p-3.5 rounded border border-white/5 space-y-2 leading-relaxed">
+                    <p><strong>1. Deposit Requirement:</strong> A 25% non-refundable deposit is required to confirm your bespoke Stay &amp; Play reservation.</p>
+                    <p><strong>2. Balance Due Date:</strong> The remaining 75% balance is strictly due 6 weeks (42 days) prior to arrival date ({liveQuote?.balance_due_date || balanceDueDate}).</p>
+                    <p><strong>3. Inventory Hold Invariant:</strong> Hotel rooms and championship tee slots remain unreserved until deposit payment is verified.</p>
+                    <p><strong>4. Rate Eligibility:</strong> Golf Ireland rates require active GUI/ILGU membership proof on arrival.</p>
+                    <p><strong>5. Payment Link Lifecycle:</strong> Payment links remain valid for 7 days with automated reminder dispatched on Day 5.</p>
+                  </div>
+                )}
+
+                <label className="flex items-start gap-3 text-xs text-gray-300 cursor-pointer select-none pt-1">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => {
+                      setAcceptedTerms(e.target.checked);
+                      if (paymentLinkError) setPaymentLinkError(null);
+                    }}
+                    className="mt-0.5 accent-[#DBB155] w-4 h-4 cursor-pointer rounded"
+                  />
+                  <span className="leading-snug">
+                    I have read and explicitly agree to the{" "}
+                    <strong className="text-white">
+                      Rosapenna Stay &amp; Play Package Terms &amp; Conditions ({liveQuote?.terms_version || "terms-v1-20261014"})
+                    </strong>
+                    , including the non-refundable 25% deposit, 75% balance due 6 weeks prior to arrival, and acknowledge that reservations are confirmed only after deposit verification.
+                  </span>
+                </label>
+
+                {paymentLinkError && (
+                  <div className="p-2.5 bg-red-950/40 border border-red-800/40 rounded text-xs text-red-300 flex items-center gap-2">
+                    <AlertTriangle size={14} className="shrink-0 text-red-400" />
+                    <span>{paymentLinkError}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1624,18 +2188,38 @@ export default function BespokePackage() {
                   (currentStep === 2 && !isOccupancySufficient) ||
                   (currentStep === 3 && !hasEnoughRounds)
                 }
-                className="w-full sm:w-auto px-8 py-3 bg-[#D4AF55] hover:bg-[#c9a04a] disabled:bg-white/10 disabled:text-gray-600 text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-all flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-8 py-3 bg-[#D4AF55] hover:bg-[#c9a04a] disabled:bg-white/10 disabled:text-gray-600 text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 Continue <ArrowRight size={16} />
               </button>
             ) : (
               <button
                 type="button"
-                onClick={handleSubmitInquiry}
-                disabled={isSubmitting}
-                className="w-full sm:w-auto px-8 py-3 bg-[#D4AF55] hover:bg-[#c9a04a] text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+                onClick={handleCreatePaymentLink}
+                disabled={
+                  Boolean(
+                    isCreatingPaymentLink ||
+                    isLoadingQuote ||
+                    !acceptedTerms ||
+                    (quoteRemainingSeconds <= 0 && !liveQuote) ||
+                    (liveQuote && liveQuote.status !== "available")
+                  )
+                }
+                className="w-full sm:w-auto px-8 py-3 bg-[#D4AF55] hover:bg-[#c9a04a] disabled:bg-white/10 disabled:text-gray-600 text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg"
               >
-                {isSubmitting ? "Registering Inquiry..." : "Register Stay & Play Inquiry"}
+                {isCreatingPaymentLink ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" /> Creating Payment Link...
+                  </>
+                ) : liveQuote && liveQuote.status !== "available" ? (
+                  <>
+                    Selected Itinerary Unavailable
+                  </>
+                ) : (
+                  <>
+                    Generate 25% Deposit Payment Link <ArrowRight size={16} />
+                  </>
+                )}
               </button>
             )}
           </div>

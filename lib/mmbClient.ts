@@ -24,6 +24,7 @@ export interface VerifyOtpResult {
 
 export interface MmbBookingSummary {
   booking_reference: string;
+  booking_revision?: number;
   source_channel: string;
   lead_guest_name: string;
   stay?: {
@@ -324,7 +325,7 @@ export interface AmendmentOfferSnapshot {
   requires_occupant_review: boolean;
   occupant_review_acknowledged: boolean;
   terms_version: string;
-  status: "pending_consent" | "accepted" | "expired" | "invalidated";
+  status: "pending_consent" | "accepted" | "expired" | "invalidated" | "committed";
   expires_at: string;
   created_at: string;
   accepted_at?: string | null;
@@ -814,4 +815,73 @@ export async function reviewOccupantsForAmendment(
     };
   }
 }
+
+// ============================================================================
+// Ticket M09: Confirmed Amendment Commit
+// ============================================================================
+
+export interface MmbAmendmentCommitRequest {
+  booking_reference: string;
+  offer_id: string;
+  revalidation_id: string;
+  payment_id?: string | null;
+  idempotency_key: string;
+}
+
+export interface MmbAmendmentCommitResponse {
+  operation_id: string;
+  booking_reference: string;
+  offer_id: string;
+  status: "confirmed" | "unconfirmed_reconciliation" | "pending_payment";
+  stage: string;
+  message: string;
+  readback_verified: boolean;
+  staff_review_required: boolean;
+  replayed: boolean;
+  new_booking_revision?: number | null;
+  email_delivery_id?: string | null;
+  committed_at?: string | null;
+  error?: string;
+}
+
+export async function commitAmendment(
+  request: MmbAmendmentCommitRequest,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: MmbAmendmentCommitResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch("/api/mmb/amendments/commit", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to commit amendment.",
+        data: json.data,
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error committing amendment.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
 

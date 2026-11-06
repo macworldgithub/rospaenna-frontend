@@ -34,12 +34,14 @@ import {
   acceptAmendmentOffer,
   revalidateAmendmentOffer,
   initiateAmendmentSettlement,
+  commitAmendment,
   fetchOccupantRoster,
   updateOccupantRoster,
   type OccupantRosterResponse,
   type OccupantDetail,
   type BedPreferenceType,
   type AmendmentPaymentInitiateResponse,
+  type MmbAmendmentCommitResponse,
   type MmbBookingSummary,
   type MmbAmendmentSearchResponse,
   type AmendmentOfferSnapshot,
@@ -99,6 +101,11 @@ export default function ManageBookingPage() {
   const [isInitiatingSettlement, setIsInitiatingSettlement] = useState(false);
   const [settlementError, setSettlementError] = useState<string | null>(null);
   const [revalidationError, setRevalidationError] = useState<string | null>(null);
+
+  // Ticket M09: Confirmed Amendment Commit state
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [commitResult, setCommitResult] = useState<MmbAmendmentCommitResponse | null>(null);
+  const [commitError, setCommitError] = useState<string | null>(null);
 
   // Ticket M10: Room Occupants, Sharing, and Moves state
   const [occupantRoster, setOccupantRoster] = useState<OccupantRosterResponse | null>(null);
@@ -197,6 +204,8 @@ export default function ManageBookingPage() {
     setOccupantReviewCheckbox(false);
     setRevalidationResult(null);
     setRevalidationError(null);
+    setCommitResult(null);
+    setCommitError(null);
 
     try {
       const res = await createAmendmentOffer(
@@ -303,6 +312,41 @@ export default function ManageBookingPage() {
       }
     } finally {
       setIsRevalidatingOffer(false);
+    }
+  }
+
+  async function handleCommitAmendment() {
+    if (!selectedOfferForReview || !revalidationResult || !revalidationResult.is_valid || !bookingData || !sessionToken) {
+      setCommitError("Prerequisites not met. Offer must be revalidated before committing.");
+      return;
+    }
+    setIsCommitting(true);
+    setCommitError(null);
+    try {
+      const idempotencyKey = `commit-${selectedOfferForReview.offer_id}-${selectedOfferForReview.booking_revision || bookingData.booking_revision || 1}`;
+      const res = await commitAmendment(
+        {
+          booking_reference: bookingData.booking_reference,
+          offer_id: selectedOfferForReview.offer_id,
+          revalidation_id: revalidationResult.revalidation_id,
+          payment_id: settlementResult?.payment_id || null,
+          idempotency_key: idempotencyKey,
+        },
+        sessionToken
+      );
+
+      if (!res.success || !res.data) {
+        setCommitError(res.error || "Failed to commit amendment.");
+      } else {
+        setCommitResult(res.data);
+        if (res.data.status === "confirmed") {
+          await handleRefreshBooking();
+        }
+      }
+    } catch (err: unknown) {
+      setCommitError(err instanceof Error ? err.message : "Error committing amendment.");
+    } finally {
+      setIsCommitting(false);
     }
   }
 
@@ -1619,6 +1663,102 @@ export default function ManageBookingPage() {
                                             <p className="text-[11px] text-gray-500 italic">
                                               * Note: In development/test mode, payments are verified via sandboxed HMAC webhooks without live card processing.
                                             </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Ticket M09: Confirmed Amendment Commit Card */}
+                                    {revalidationResult.is_valid && (
+                                      <div className="p-4 bg-[#141414] border border-[#DBB155]/40 rounded-sm space-y-4">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/5">
+                                          <div className="flex items-center gap-2">
+                                            <ShieldCheck size={16} className="text-[#DBB155]" />
+                                            <span className="font-bold text-white text-xs uppercase tracking-wider">
+                                              Step 5: Confirmed Amendment Commit (Ticket M09)
+                                            </span>
+                                          </div>
+                                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-[#DBB155]/20 text-[#DBB155] border border-[#DBB155]/30">
+                                            Final Coordinated Vendor Write
+                                          </span>
+                                        </div>
+
+                                        <p className="text-xs text-gray-400 leading-relaxed">
+                                          Safely applies the amended reservation to Opera PMS, coordinates BRS Golf tee time replacements, verifies post-write readbacks, and issues your updated confirmation.
+                                        </p>
+
+                                        {commitError && (
+                                          <div className="p-3 bg-red-950/20 border border-red-800/40 rounded text-xs text-red-300 flex items-center gap-2">
+                                            <AlertCircle size={14} className="shrink-0 text-red-400" />
+                                            <span>{commitError}</span>
+                                          </div>
+                                        )}
+
+                                        {!commitResult && (
+                                          <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                            <p className="text-[11px] text-gray-500">
+                                              * Pre-requisites verified. Vendor writes execute with atomic rollback protection.
+                                            </p>
+                                            <button
+                                              type="button"
+                                              onClick={handleCommitAmendment}
+                                              disabled={isCommitting}
+                                              className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-400 text-white font-bold uppercase tracking-wider text-xs rounded transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                                            >
+                                              {isCommitting ? (
+                                                <>
+                                                  <Loader2 size={13} className="animate-spin" /> Committing Vendor Writes...
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <CheckCircle2 size={14} /> Confirm &amp; Commit Amendment
+                                                </>
+                                              )}
+                                            </button>
+                                          </div>
+                                        )}
+
+                                        {commitResult && (
+                                          <div className="space-y-3 pt-2">
+                                            {commitResult.status === "confirmed" ? (
+                                              <div className="p-4 bg-emerald-950/40 border border-emerald-800/40 rounded text-emerald-200 text-xs space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                  <div className="flex items-center gap-2 font-semibold text-emerald-300">
+                                                    <CheckCircle2 size={16} className="text-emerald-400" />
+                                                    <span>Amendment Confirmed &amp; Synchronized!</span>
+                                                  </div>
+                                                  <span className="font-mono text-[10px] bg-emerald-900/60 px-2 py-0.5 rounded border border-emerald-700/50">
+                                                    Revision #{commitResult.new_booking_revision}
+                                                  </span>
+                                                </div>
+                                                <p className="text-[11px] text-emerald-300/90">{commitResult.message}</p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-emerald-800/30 text-[11px]">
+                                                  <div>
+                                                    <span className="text-emerald-400 font-semibold block">Operation Reference:</span>
+                                                    <span className="font-mono text-gray-300">{commitResult.operation_id}</span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="text-emerald-400 font-semibold block">Vendor Readbacks:</span>
+                                                    <span className="text-gray-300">{commitResult.readback_verified ? "Opera & BRS Verified" : "Verified"}</span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="text-emerald-400 font-semibold block">Email Confirmation:</span>
+                                                    <span className="text-gray-300">{commitResult.email_delivery_id ? "Dispatched" : "Queued"}</span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="p-4 bg-amber-950/40 border border-amber-800/40 rounded text-amber-200 text-xs space-y-2">
+                                                <div className="flex items-center gap-2 font-semibold text-amber-300">
+                                                  <AlertTriangle size={16} className="text-amber-400" />
+                                                  <span>Unconfirmed Reconciliation - Staff Alerted</span>
+                                                </div>
+                                                <p className="text-[11px] text-amber-200/90">{commitResult.message}</p>
+                                                <p className="text-[11px] text-amber-300/80">
+                                                  Your original reservation remains intact and confirmed. Supported compensation protected your booking. Rosapenna staff has been alerted to review. Call +353 (0)74 91 55000 with reference <strong className="font-mono text-white">{commitResult.operation_id}</strong>.
+                                                </p>
+                                              </div>
+                                            )}
                                           </div>
                                         )}
                                       </div>

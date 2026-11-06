@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "This booking session has expired. Please choose the tee time again." }, { status: 400 });
     }
     if (!payload || !/^\d{4}-\d{2}-\d{2}$/.test(payload.date || "") ||
-        ![1, 3].includes(payload.course?.id) || !Number.isInteger(payload.teeTime?.id) ||
+        ![1, 3, 4].includes(payload.course?.id) || !Number.isInteger(payload.teeTime?.id) ||
         !hasText(payload.teeTime?.time, 5) || !/^\d{2}:\d{2}$/.test(payload.teeTime.time) ||
         !Number.isInteger(payload.greenFee?.id) || !hasText(payload.greenFee?.num_holes, 40) ||
         !hasText(payload.greenFee?.package_name, 120) || players < 1 || players > 4 ||

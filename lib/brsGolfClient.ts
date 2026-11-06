@@ -67,15 +67,20 @@ export async function prepareCheckoutWithEvidence(payload: unknown) {
 
 async function requestCheckout(payload: unknown, cookie: string, xsrfToken: string) {
   let response: Response;
+  const courseId = (payload as { course?: { id?: number } })?.course?.id;
+  const isStPatricks = courseId === 4;
+  const clubId = isStPatricks ? "stpatrickslinks" : "rosapenna";
+  const referer = `${BASE_URL}/${clubId}`;
+
   try {
     response = await fetch(`${BASE_URL}/api/checkout/prepare`, {
       method: "POST",
       headers: {
         Accept: "application/json, text/plain, */*",
         "Content-Type": "application/json",
-        Referer: `${BASE_URL}/rosapenna`,
+        Referer: referer,
         Origin: BASE_URL,
-        "X-Club-ID": "rosapenna",
+        "X-Club-ID": clubId,
         "X-Booking-Source": "ui",
         "X-Requested-With": "XMLHttpRequest",
         "X-XSRF-TOKEN": xsrfToken,

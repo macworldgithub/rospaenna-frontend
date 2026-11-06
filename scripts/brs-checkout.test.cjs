@@ -241,3 +241,19 @@ test('a repeated request with an in-progress draft does not prepare checkout aga
   assert.equal(response.body.bookingIntentStage, 'checkout_preparation_pending');
   assert.deepEqual(fixture.backendCalls.map(call => call.path), ['/booking-intents']);
 });
+
+test('course 4 (St Patricks Links) is accepted and processed through checkout route', async () => {
+  const fixture = loadCheckoutRoute();
+  const req = {
+    headers: fixture.req.headers,
+    json: async () => {
+      const base = await fixture.req.json();
+      return { ...base, course: { id: 4, facilities_id: 5897, name: "St Patrick's Links" } };
+    },
+  };
+  const response = await fixture.route.POST(req);
+  assert.equal(response.status, undefined);
+  assert.equal(response.body.bookingIntentId, 'bki_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+  assert.equal(response.body.bookingIntentStage, 'checkout_preparation_response_received');
+});
+

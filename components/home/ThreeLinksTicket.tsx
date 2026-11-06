@@ -22,7 +22,7 @@ export default function ThreeLinksTicket() {
             </h2>
 
             <p className="mt-5 text-[#A7A7A7] text-base leading-8 max-w-xl">
-              The ultimate Rosapenna experience. Play St Patrick's, Sandy Hills,
+              The ultimate Rosapenna experience. Play St Patrick&apos;s, Sandy Hills,
               and Old Tom Morris Links with one exclusive ticket.
             </p>
           </div>

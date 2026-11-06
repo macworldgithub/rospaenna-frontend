@@ -22,11 +22,11 @@ export default function ExperienceSection() {
           <p className="text-gray-400 leading-relaxed mb-5">
             Rosapenna Hotel &amp; Golf Resort offers the complete links golf
             holiday experience. Stay in our luxury hotel overlooking Sheephaven
-            Bay, dine on fresh Atlantic seafood, and play three of Ireland's
+            Bay, dine on fresh Atlantic seafood, and play three of Ireland&apos;s
             finest championship links courses.
           </p>
           <p className="text-gray-400 leading-relaxed mb-10">
-            Whether you're a seasoned links golfer or discovering Irish golf for
+            Whether you&apos;re a seasoned links golfer or discovering Irish golf for
             the first time, Rosapenna provides an unforgettable escape on the
             wild Atlantic Way.
           </p>

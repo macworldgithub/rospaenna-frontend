@@ -32,6 +32,11 @@ export interface MmbBookingSummary {
     nights: number;
     room_category: string;
     room_quantity: number;
+    assigned_room_number?: string | null;
+    occupant_names?: string[];
+    meal_plan?: string;
+    source_status?: "confirmed" | "unavailable" | "stale";
+    last_synced_at?: string;
   } | null;
   golf_rounds: Array<{
     course_name: string;
@@ -39,6 +44,8 @@ export interface MmbBookingSummary {
     time: string;
     holes: string;
     players: number;
+    caddy_request_status?: string | null;
+    source_status?: "confirmed" | "unavailable" | "stale";
   }>;
   financials: {
     total_amount: string;
@@ -46,7 +53,27 @@ export interface MmbBookingSummary {
     balance_due: string;
     currency: string;
     payment_status: string;
+    balance_due_date?: string | null;
+    ledger_verified?: boolean;
+    payments_count?: number;
   };
+  pending_requests?: Array<{
+    request_id: string;
+    request_type: string;
+    description: string;
+    status: "pending_review" | "under_review" | "approved" | "declined";
+    submitted_at: string;
+    notes?: string;
+  }>;
+  sources_health?: Record<
+    string,
+    {
+      status: "confirmed" | "unavailable" | "stale" | "partial";
+      message: string;
+      last_synced_at?: string;
+    }
+  >;
+  data_freshness_timestamp?: string;
   status: string;
 }
 
@@ -146,3 +173,645 @@ export async function logoutMmbSession(
     return { success: false, error: "Network error during sign out." };
   }
 }
+
+export interface ProposedGolfRoundSearch {
+  course_id?: number;
+  course_name?: string;
+  date: string;
+  time_window?: string;
+  players?: number;
+}
+
+export interface MmbAmendmentSearchRequest {
+  booking_reference: string;
+  proposed_arrival_date?: string;
+  proposed_departure_date?: string;
+  proposed_room_category?: string;
+  proposed_room_quantity?: number;
+  proposed_golf_rounds?: ProposedGolfRoundSearch[];
+  requested_notes?: string;
+}
+
+export interface ProposedStayOption {
+  arrival_date: string;
+  departure_date: string;
+  nights: number;
+  room_category: string;
+  room_quantity: number;
+  is_available: boolean;
+  own_allocation_retained: boolean;
+  nightly_rate: string;
+  stay_total: string;
+  rate_plan_code?: string;
+  breakfast_included?: boolean;
+  source_freshness: string;
+}
+
+export interface ProposedGolfRoundOption {
+  course_id?: number;
+  course_name: string;
+  date: string;
+  time: string;
+  players: number;
+  holes: string;
+  round_price_total: string;
+  is_available: boolean;
+  own_allocation_retained?: boolean;
+  source_freshness: string;
+}
+
+export interface AmendmentPricingComparison {
+  original_package_total: string;
+  new_package_total: string;
+  price_delta: string;
+  deposit_already_paid: string;
+  revised_balance_due: string;
+  currency?: string;
+}
+
+export interface AmendmentOptionAlternative {
+  option_id: string;
+  title: string;
+  description: string;
+  stay_option: ProposedStayOption;
+  golf_options: ProposedGolfRoundOption[];
+  pricing_comparison: AmendmentPricingComparison;
+  eligibility_checks?: Record<string, boolean>;
+  is_complete_package: boolean;
+  unavailability_reasons: string[];
+}
+
+export interface MmbAmendmentSearchResponse {
+  booking_reference: string;
+  search_id: string;
+  searched_at: string;
+  current_itinerary?: MmbBookingSummary;
+  is_complete_itinerary_available: boolean;
+  alternatives: AmendmentOptionAlternative[];
+  sources_freshness: Record<string, { status: string; message: string; last_synced_at?: string }>;
+  warnings: string[];
+  reserves_inventory: boolean;
+  error?: string;
+}
+
+export async function searchAmendmentOptions(
+  request: MmbAmendmentSearchRequest,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: MmbAmendmentSearchResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch("/api/mmb/amendments/search", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to search amendment options.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error during amendment search.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export interface AmendmentOfferCreateRequest {
+  booking_reference: string;
+  option_id: string;
+  proposed_stay: ProposedStayOption;
+  proposed_golf_rounds: ProposedGolfRoundOption[];
+}
+
+export interface AmendmentOfferAcceptRequest {
+  offer_id: string;
+  booking_reference: string;
+  terms_version: string;
+  accepted_terms: boolean;
+  occupant_review_acknowledged?: boolean;
+}
+
+export interface AmendmentOfferSnapshot {
+  offer_id: string;
+  booking_reference: string;
+  booking_revision: number;
+  option_id: string;
+  current_itinerary: MmbBookingSummary;
+  proposed_stay: ProposedStayOption;
+  proposed_golf_rounds: ProposedGolfRoundOption[];
+  pricing_comparison: AmendmentPricingComparison;
+  credit_amount: string;
+  amount_due_now: string;
+  balance_due_date: string;
+  amendment_fee: string;
+  requires_occupant_review: boolean;
+  occupant_review_acknowledged: boolean;
+  terms_version: string;
+  status: "pending_consent" | "accepted" | "expired" | "invalidated";
+  expires_at: string;
+  created_at: string;
+  accepted_at?: string | null;
+  reserves_inventory: boolean;
+}
+
+export async function createAmendmentOffer(
+  request: AmendmentOfferCreateRequest,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: AmendmentOfferSnapshot; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch("/api/mmb/amendments/offer", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to generate amendment offer.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error creating amendment offer.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function getAmendmentOffer(
+  offerId: string,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: AmendmentOfferSnapshot; error?: string }> {
+  try {
+    const headers: Record<string, string> = {};
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(`/api/mmb/amendments/offer/${encodeURIComponent(offerId)}`, {
+      method: "GET",
+      headers,
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch amendment offer.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching amendment offer.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function acceptAmendmentOffer(
+  request: AmendmentOfferAcceptRequest,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: AmendmentOfferSnapshot; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch("/api/mmb/amendments/offer/accept", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to accept amendment offer.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error accepting amendment offer.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export interface AmendmentRevalidationComponentCheck {
+  component: "hotel_rooms" | "golf_rounds" | "pricing_ledger" | "booking_revision" | "terms_acceptance";
+  status: "passed" | "failed" | "stale" | "indeterminate";
+  message: string;
+  checked_at: string;
+}
+
+export interface AmendmentRevalidationRequest {
+  booking_reference: string;
+  offer_id: string;
+  idempotency_key?: string;
+  simulate_sold_out_room?: boolean;
+  simulate_unavailable_tee?: boolean;
+  simulate_rate_change?: string;
+}
+
+export interface AmendmentRevalidationResponse {
+  revalidation_id: string;
+  offer_id: string;
+  booking_reference: string;
+  is_valid: boolean;
+  revalidation_status:
+    | "valid"
+    | "room_unavailable"
+    | "tee_time_unavailable"
+    | "price_changed"
+    | "ledger_changed"
+    | "revision_conflict"
+    | "offer_expired"
+    | "unaccepted_offer"
+    | "gate_disabled";
+  summary_message: string;
+  checks: AmendmentRevalidationComponentCheck[];
+  refreshed_offer?: AmendmentOfferSnapshot | null;
+  revalidated_at: string;
+  reserves_inventory: boolean;
+  idempotency_key?: string | null;
+}
+
+export async function revalidateAmendmentOffer(
+  request: AmendmentRevalidationRequest,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: AmendmentRevalidationResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch("/api/mmb/amendments/revalidate", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to revalidate amendment offer.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error revalidating amendment offer.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export type AmendmentPaymentActionType = "payment_required" | "zero_due" | "credit_generated";
+export type AmendmentSettlementStatus =
+  | "payment_link_created"
+  | "zero_due_authorized"
+  | "credit_recorded"
+  | "paid_unconfirmed";
+
+export interface AmendmentPaymentInitiateRequest {
+  booking_reference: string;
+  offer_id: string;
+  revalidation_id: string;
+  idempotency_key?: string;
+}
+
+export interface AmendmentPaymentInitiateResponse {
+  booking_reference: string;
+  offer_id: string;
+  revalidation_id: string;
+  action_type: AmendmentPaymentActionType;
+  settlement_status: AmendmentSettlementStatus;
+  payment_id?: string | null;
+  payment_url?: string | null;
+  amount_due_now: string;
+  credit_amount: string;
+  currency: string;
+  expires_at?: string | null;
+  message: string;
+  reserves_inventory: boolean;
+  idempotency_key?: string | null;
+  created_at: string;
+}
+
+export async function initiateAmendmentSettlement(
+  request: AmendmentPaymentInitiateRequest,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: AmendmentPaymentInitiateResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch("/api/mmb/amendments/settlement/initiate", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to initiate amendment settlement.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error initiating amendment settlement.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function getAmendmentPaymentStatus(
+  paymentId: string,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+  try {
+    const headers: Record<string, string> = {};
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(`/api/mmb/amendments/settlement/payment/${encodeURIComponent(paymentId)}`, {
+      method: "GET",
+      headers,
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch amendment payment status.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching amendment payment status.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+// ============================================================================
+// Ticket M10: Room Occupants, Sharing, and Moves
+// ============================================================================
+
+export type BedPreferenceType = "TWIN" | "DOUBLE" | "SINGLE";
+export type OccupantUpdateStatus = "confirmed" | "pending_staff_review" | "conflict" | "invalidated";
+
+export interface OccupantDetail {
+  occupant_id?: string | null;
+  first_name: string;
+  last_name: string;
+  is_primary?: boolean;
+  room_group_id: string;
+  effective_from: string; // YYYY-MM-DD
+  effective_to: string;   // YYYY-MM-DD
+}
+
+export interface SharingPreference {
+  room_group_id: string;
+  bed_type_preference: BedPreferenceType;
+  notes?: string | null;
+  sharing_with?: string | null;
+}
+
+export interface BookedRoomGroupSummary {
+  room_group_id: string;
+  room_category: string;
+  capacity: number;
+  assigned_occupants: string[];
+  sharing_preference?: SharingPreference | null;
+}
+
+export interface OccupantRosterResponse {
+  booking_reference: string;
+  arrival_date: string;
+  departure_date: string;
+  room_quantity: number;
+  room_groups: BookedRoomGroupSummary[];
+  occupants: OccupantDetail[];
+  sharing_preferences: SharingPreference[];
+  unassigned_physical_room_notice: string;
+  version_hash: string;
+  revision: number;
+  pending_amendment_review: boolean;
+  active_amendment_offer_id?: string | null;
+}
+
+export interface OccupantUpdateRequest {
+  booking_reference: string;
+  expected_revision?: number | null;
+  occupants: OccupantDetail[];
+  sharing_preferences?: SharingPreference[];
+  idempotency_key?: string | null;
+  amendment_offer_id?: string | null;
+}
+
+export interface OccupantUpdateResponse {
+  booking_reference: string;
+  status: OccupantUpdateStatus;
+  version_hash: string;
+  revision: number;
+  occupants: OccupantDetail[];
+  sharing_preferences: SharingPreference[];
+  readback_verified: boolean;
+  unassigned_physical_room_notice: string;
+  amendment_offer_id?: string | null;
+  message: string;
+}
+
+export async function fetchOccupantRoster(
+  bookingReference: string,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: OccupantRosterResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {};
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(`/api/mmb/occupants/${encodeURIComponent(bookingReference.trim().toUpperCase())}`, {
+      method: "GET",
+      headers,
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch room occupants roster.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching occupant roster.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function updateOccupantRoster(
+  bookingReference: string,
+  request: OccupantUpdateRequest,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: OccupantUpdateResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(`/api/mmb/occupants/${encodeURIComponent(bookingReference.trim().toUpperCase())}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to update occupant roster.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error updating occupant roster.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function reviewOccupantsForAmendment(
+  bookingReference: string,
+  request: OccupantUpdateRequest,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: OccupantUpdateResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(`/api/mmb/occupants/${encodeURIComponent(bookingReference.trim().toUpperCase())}/review-for-amendment`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to review occupants for amendment.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error reviewing occupants for amendment.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+

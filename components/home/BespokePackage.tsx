@@ -270,9 +270,9 @@ export default function BespokePackage() {
   }, [arrivalDate, nights, playOnDeparture]);
 
   // Helper: St Patrick's Links closure and agronomy status checker
-  const getStPatricksStatusForDate = (dateStr: string) => {
+  const getStPatricksStatusForDate = useCallback((dateStr: string) => {
     if (!dateStr) return { isAvailable: false, reason: "" };
-    const [y, m, d] = dateStr.split("-").map(Number);
+    const [, m, d] = dateStr.split("-").map(Number);
     const mmDd = `${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
     if (m === 11 || m === 12 || m === 1 || m === 2 || m === 3) {
@@ -300,12 +300,48 @@ export default function BespokePackage() {
     }
 
     return { isAvailable: true, reason: "" };
-  };
+  }, [searchResults]);
+
+  // Helper: General course closure and season status checker
+  const getCourseClosureForDate = useCallback((dateStr: string, courseId: number) => {
+    if (!dateStr) return { isAvailable: false, reason: "" };
+
+    // 1. Check live search results for this date & course
+    const liveDay = searchResults?.daily_golf_options?.find(
+      (g) => g.course_id === courseId && g.date === dateStr
+    );
+    if (liveDay?.is_closed) {
+      return {
+        isAvailable: false,
+        reason: liveDay.closure_reason || `${courseId === 3 ? "Sandy Hills Links" : courseId === 4 ? "St Patrick's Links" : "Old Tom Morris Links"} is closed on this date.`,
+      };
+    }
+
+    // 2. St Patrick's specific calendar rules
+    if (courseId === 4) {
+      return getStPatricksStatusForDate(dateStr);
+    }
+
+    // 3. Sandy Hills winter closure: December through mid-April (opens 19 April 2027)
+    if (courseId === 3) {
+      const parts = dateStr.split("-").map(Number);
+      const m = parts[1];
+      const d = parts[2];
+      if (m === 12 || m === 1 || m === 2 || m === 3 || (m === 4 && d < 19)) {
+        return {
+          isAvailable: false,
+          reason: "Sandy Hills Links is closed for the winter period (reopens 19 April 2027). Only Old Tom Morris Links is available.",
+        };
+      }
+    }
+
+    return { isAvailable: true, reason: "" };
+  }, [searchResults, getStPatricksStatusForDate]);
 
   const isStPatricksClosedForAllStayDays = useMemo(() => {
     if (!stayDates.length) return false;
     return stayDates.every((day) => !getStPatricksStatusForDate(day.date).isAvailable);
-  }, [stayDates, searchResults]);
+  }, [stayDates, getStPatricksStatusForDate]);
 
   // Synchronize dailyGolfPlan with stay dates and closure states
   useEffect(() => {
@@ -316,27 +352,41 @@ export default function BespokePackage() {
 
       stayDates.forEach((day, idx) => {
         const existing = next[day.date];
-        const stpStatus = getStPatricksStatusForDate(day.date);
+        const stpStatus = getCourseClosureForDate(day.date, 4);
+        const sandyStatus = getCourseClosureForDate(day.date, 3);
+        const otmStatus = getCourseClosureForDate(day.date, 1);
 
-        // If selected St Patrick's but it is closed on this date, fallback to Sandy Hills
-        if (existing && existing.courseId === 4 && !stpStatus.isAvailable) {
-          next[day.date] = {
-            courseId: 3,
-            timeSlot: existing.timeSlot || "10:00",
-            isRestDay: false,
-          };
-          changed = true;
-          return;
+        // If existing selection is closed on this date, fallback to an open course
+        if (existing && !existing.isRestDay && existing.courseId) {
+          const currentStatus = getCourseClosureForDate(day.date, existing.courseId);
+          if (!currentStatus.isAvailable) {
+            let fallbackCourse = 1;
+            if (existing.courseId === 4 && sandyStatus.isAvailable) fallbackCourse = 3;
+            else if (existing.courseId === 3 && otmStatus.isAvailable) fallbackCourse = 1;
+
+            next[day.date] = {
+              courseId: fallbackCourse,
+              timeSlot: existing.timeSlot || "13:30",
+              isRestDay: false,
+            };
+            changed = true;
+            return;
+          }
         }
 
         if (!existing) {
           changed = true;
+          // Pick best open course based on live availability
+          const day1Course = sandyStatus.isAvailable ? 3 : 1;
+          const day2Course = stpStatus.isAvailable ? 4 : (sandyStatus.isAvailable ? 3 : 1);
+          const day3Course = 1;
+
           if (idx === 0) {
-            next[day.date] = { courseId: 3, timeSlot: "13:30", isRestDay: false };
+            next[day.date] = { courseId: day1Course, timeSlot: "13:30", isRestDay: false };
           } else if (idx === 1) {
-            next[day.date] = { courseId: stpStatus.isAvailable ? 4 : 1, timeSlot: "10:00", isRestDay: false };
+            next[day.date] = { courseId: day2Course, timeSlot: "10:00", isRestDay: false };
           } else if (idx === 2) {
-            next[day.date] = { courseId: 1, timeSlot: "09:30", isRestDay: false };
+            next[day.date] = { courseId: day3Course, timeSlot: "09:30", isRestDay: false };
           } else {
             next[day.date] = { courseId: null, timeSlot: "", isRestDay: true };
           }
@@ -345,7 +395,7 @@ export default function BespokePackage() {
 
       return changed ? next : prev;
     });
-  }, [stayDates, searchResults]);
+  }, [stayDates, searchResults, getCourseClosureForDate]);
 
   // Derived counts of scheduled rounds
   const { stPatricksRounds, sandyHillsRounds, oldTomMorrisRounds } = useMemo(() => {
@@ -501,9 +551,10 @@ export default function BespokePackage() {
         if (isMounted) {
           setSearchResults(data);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMounted) {
-          setSearchError(err?.message || "Live search service temporarily unavailable.");
+          const msg = err instanceof Error ? err.message : "Live search service temporarily unavailable.";
+          setSearchError(msg);
         }
       } finally {
         if (isMounted) {
@@ -1635,10 +1686,9 @@ export default function BespokePackage() {
                       const isSelected = activeDayPlan?.courseId === course.courseId && !activeDayPlan?.isRestDay;
                       const rate = isGolfIrelandEligible ? course.residentRate : course.stdRate;
 
-                      // St Patrick's Links specific closure check
-                      const isStP = course.courseId === 4;
-                      const stpStatus = isStP ? getStPatricksStatusForDate(activeDay.date) : { isAvailable: true, reason: "" };
-                      const isDisabled = isStP && !stpStatus.isAvailable;
+                      // Check general course closure status (agronomy rest, winter closure, BRS message)
+                      const closureStatus = getCourseClosureForDate(activeDay.date, course.courseId);
+                      const isDisabled = !closureStatus.isAvailable;
 
                       // Live tee times from BRS for this day and course
                       const liveGolf = searchResults?.daily_golf_options?.find(
@@ -1666,7 +1716,7 @@ export default function BespokePackage() {
                                 <span className="text-[10px] text-[#D4AF55] uppercase tracking-wider">{course.badge}</span>
                                 {isDisabled && (
                                   <span className="inline-flex items-center gap-1 text-[10px] bg-amber-950/60 border border-amber-800/60 text-amber-300 px-2 py-0.5 rounded font-mono">
-                                    <Lock size={10} /> Resting on this date
+                                    <Lock size={10} /> {closureStatus.reason.includes("resting") || closureStatus.reason.includes("maintenance") ? "Resting on this date" : "Closed on this date"}
                                   </span>
                                 )}
                               </div>
@@ -1676,7 +1726,7 @@ export default function BespokePackage() {
                               {isDisabled && (
                                 <p className="text-[11px] text-amber-400 mt-1.5 flex items-center gap-1.5">
                                   <AlertTriangle size={12} className="shrink-0" />
-                                  <span>{stpStatus.reason}</span>
+                                  <span>{closureStatus.reason}</span>
                                 </p>
                               )}
                             </div>
@@ -1920,6 +1970,15 @@ export default function BespokePackage() {
                         ))}
                       </ul>
                     )}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setCurrentStep(3)}
+                        className="px-3 py-1.5 bg-[#DBB155] hover:bg-[#c9a04a] text-black font-semibold rounded text-[11px] transition-colors cursor-pointer"
+                      >
+                        Adjust Golf Schedule in Step 3 &rarr;
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="border border-[#DBB155]/40 bg-[#141007] p-4 rounded-sm space-y-2 text-xs">

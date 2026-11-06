@@ -1,6 +1,3 @@
-import Link from "next/link";
-import Image from "next/image";
-
 export default function GolfSection() {
   return (
     <section id="golf" className="bg-black py-16 sm:py-24 px-4 sm:px-6">
@@ -18,7 +15,7 @@ export default function GolfSection() {
           </h2>
           <p className="text-gray-400 text-base mt-5 max-w-xl leading-relaxed">
             Three world-class links courses, each with its own character and
-            challenge, all set against the dramatic backdrop of Donegal's
+            challenge, all set against the dramatic backdrop of Donegal&apos;s
             Atlantic coastline.
           </p>
         </div>

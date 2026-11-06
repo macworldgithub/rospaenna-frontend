@@ -58,7 +58,7 @@ export default function GolfHeritage() {
                 Since Old Tom Morris first set foot on the Rosapenna dunes in
                 1893, this stretch of Donegal coastline has been hallowed ground
                 for golfers. What began as a single links course has evolved
-                into one of the world's premier golf destinations.
+                into one of the world&apos;s premier golf destinations.
               </p>
 
               <p>

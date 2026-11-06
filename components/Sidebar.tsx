@@ -45,7 +45,7 @@ export default function Sidebar() {
         </div>
 
         <p className="text-[11px] text-gray-400 leading-[1.8] text-justify mb-8">
-          Located on the edge of the picturesque Sheephaven Bay, Rosapenna is the proud home to the Old Tom Morris Links designed by Old Tom Morris of St. Andrews in 1893 and a modern great in the Sandy Hills Links laid out by Pat Ruddy of The European Club fame and open for play since 2003. Our new St Patrick's Links by Tom Doak is available to book online via the link on our homepage. This spectacular links opened in late June 2021 and has taken the golf world by storm, rising 5 places in the GOLF Magazine Top 100 in the World rankings 2025-26 to a new high of #44. With a luxury hotel on site, Rosapenna is the perfect venue for a golf break or just a quiet getaway in this beautiful corner of Donegal.
+          Located on the edge of the picturesque Sheephaven Bay, Rosapenna is the proud home to the Old Tom Morris Links designed by Old Tom Morris of St. Andrews in 1893 and a modern great in the Sandy Hills Links laid out by Pat Ruddy of The European Club fame and open for play since 2003. Our new St Patrick&apos;s Links by Tom Doak is available to book online via the link on our homepage. This spectacular links opened in late June 2021 and has taken the golf world by storm, rising 5 places in the GOLF Magazine Top 100 in the World rankings 2025-26 to a new high of #44. With a luxury hotel on site, Rosapenna is the perfect venue for a golf break or just a quiet getaway in this beautiful corner of Donegal.
         </p>
 
         {/* Embedded Google Map */}

@@ -38,7 +38,7 @@ export default function HeroSection() {
         {/* Subtext */}
         <p className="text-white/70 text-sm sm:text-base md:text-lg max-w-145 leading-relaxed mb-8 sm:mb-10">
           Where the wild Atlantic meets the ancient dunes of Donegal. Experience
-          world-class links golf at St Patrick's, Sandy Hills, and Old Tom
+          world-class links golf at St Patrick&apos;s, Sandy Hills, and Old Tom
           Morris — all from one extraordinary resort.
         </p>
 

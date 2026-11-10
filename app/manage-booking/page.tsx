@@ -41,6 +41,14 @@ import {
   updateGuestPhone,
   fetchBookingCaddyRoster,
   updateRoundCaddyRequest,
+  fetchGuestRequests,
+  submitGuestSpecialRequest,
+  type GuestSpecialRequestCreate,
+  type GuestSpecialRequestResponse,
+  type GuestRequestsListResponse,
+  type GuestSpecialRequestItem,
+  type SpecialRequestCategory,
+  type RequestType,
   type GuestPhoneReadResponse,
   type GuestPhoneUpdateResponse,
   type BookingCaddyRosterResponse,
@@ -143,6 +151,19 @@ export default function ManageBookingPage() {
     notes: string;
   }>>({});
 
+  // Ticket M13: Special and Cancellation Requests state
+  const [requestsList, setRequestsList] = useState<GuestRequestsListResponse | null>(null);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [requestText, setRequestText] = useState("");
+  const [requestTypeChoice, setRequestTypeChoice] = useState<RequestType>("special_request");
+  const [requestCategory, setRequestCategory] = useState<SpecialRequestCategory>("general_inquiry");
+  const [desiredDates, setDesiredDates] = useState("");
+  const [desiredRoom, setDesiredRoom] = useState("");
+  const [desiredGolf, setDesiredGolf] = useState("");
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [requestSuccessMessage, setRequestSuccessMessage] = useState<string | null>(null);
+
   useEffect(() => {
     if (cooldown > 0) {
       const timer = setTimeout(() => setCooldown((c) => c - 1), 1000);
@@ -199,6 +220,7 @@ export default function ManageBookingPage() {
           await loadOccupantRoster(bookingRef, token);
           await loadGuestPhone(bookingRef, token);
           await loadCaddyRoster(bookingRef, token);
+          await loadGuestRequests(bookingRef, token);
         }
         setVerified(true);
       } else {
@@ -222,6 +244,7 @@ export default function ManageBookingPage() {
         }
         await loadGuestPhone(bookingRef, sessionToken);
         await loadCaddyRoster(bookingRef, sessionToken);
+        await loadGuestRequests(bookingRef, sessionToken);
       }
     } finally {
       setIsRefreshing(false);
@@ -591,6 +614,73 @@ export default function ManageBookingPage() {
     }
   }
 
+  async function loadGuestRequests(refToUse?: string, tokenToUse?: string) {
+    const ref = refToUse || bookingData?.booking_reference || bookingRef;
+    const tok = tokenToUse || sessionToken;
+    if (!ref || !tok) return;
+
+    setIsLoadingRequests(true);
+    setRequestError(null);
+    try {
+      const res = await fetchGuestRequests(ref, tok);
+      if (res.success && res.data) {
+        setRequestsList(res.data);
+      } else {
+        setRequestError(res.error || "Failed to load guest requests.");
+      }
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  }
+
+  async function handleSubmitGuestRequest(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sessionToken || !bookingData) return;
+    if (!requestText.trim() || requestText.trim().length < 5) {
+      setRequestError("Please enter at least 5 characters for your request.");
+      return;
+    }
+
+    setIsSubmittingRequest(true);
+    setRequestError(null);
+    setRequestSuccessMessage(null);
+
+    try {
+      const payload: GuestSpecialRequestCreate = {
+        booking_reference: bookingData.booking_reference,
+        request_type: requestTypeChoice,
+        category: requestCategory,
+        request_text: requestText.trim(),
+        desired_dates: desiredDates.trim() || undefined,
+        desired_room_category: desiredRoom.trim() || undefined,
+        desired_golf_notes: desiredGolf.trim() || undefined,
+        expected_revision: bookingData.booking_revision,
+      };
+
+      const res = await submitGuestSpecialRequest(
+        bookingData.booking_reference,
+        payload,
+        sessionToken
+      );
+
+      if (res.success && res.data) {
+        setRequestSuccessMessage(res.data.message);
+        setRequestText("");
+        setDesiredDates("");
+        setDesiredRoom("");
+        setDesiredGolf("");
+        await loadGuestRequests();
+        await handleRefreshBooking();
+      } else {
+        setRequestError(res.error || "Failed to submit request.");
+      }
+    } catch (err: unknown) {
+      setRequestError(err instanceof Error ? err.message : "Error submitting request.");
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  }
+
   async function handleLogout() {
     if (sessionToken) {
       await logoutMmbSession(sessionToken);
@@ -611,6 +701,10 @@ export default function ManageBookingPage() {
     setCaddyError(null);
     setCaddySuccessMessage(null);
     setCaddyDrafts({});
+    setRequestsList(null);
+    setRequestError(null);
+    setRequestSuccessMessage(null);
+    setRequestText("");
   }
 
   async function checkStatus() {
@@ -2840,27 +2934,345 @@ export default function ManageBookingPage() {
               )
             )}
 
-            {/* Tab 4: Special Requests (Scope Ticket M13) */}
+            {/* Tab 4: Special and Cancellation Requests (Ticket M13) */}
             {activeTab === "requests" && (
-              <div className="bg-[#111] border border-white/5 p-6 rounded-sm space-y-4 text-xs">
-                <span className="text-[#DBB155] uppercase tracking-wider font-semibold block border-b border-white/5 pb-2">
-                  Stage 5: Special Requests &amp; Staff Inquiries (Scope Ticket M13)
-                </span>
-                <p className="text-gray-300">
-                  Submit free-text requests for dietary requirements, medical buggies, or preferred tee-time shifts directly to hotel reservations.
-                </p>
-                <textarea
-                  rows={3}
-                  placeholder="e.g. Please arrange adjacent rooms on ground floor if possible; dietary notice: 1 coeliac guest..."
-                  className="w-full bg-[#161616] border border-white/10 p-3 text-white text-xs rounded-sm outline-none focus:border-[#DBB155] resize-none"
-                />
-                <button
-                  type="button"
-                  className="px-5 py-2 bg-[#DBB155] hover:bg-[#c9a04a] text-black font-semibold uppercase tracking-wider text-xs rounded-sm cursor-pointer flex items-center gap-1.5"
-                >
-                  <Send size={13} /> Submit Request to Reservations
-                </button>
-              </div>
+              !verified || !bookingData ? (
+                <div className="bg-[#111] border border-white/5 p-8 rounded-sm text-center space-y-4">
+                  <div className="w-12 h-12 rounded-full bg-[#DBB155]/10 border border-[#DBB155]/20 flex items-center justify-center mx-auto text-[#DBB155]">
+                    <Lock size={20} />
+                  </div>
+                  <h3 className="text-base font-serif font-bold text-white">Authentication Required</h3>
+                  <p className="text-xs text-gray-400 max-w-md mx-auto">
+                    Please verify your one-time code to submit special requests, dietary preferences, or cancellation inquiries.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6 text-xs">
+                  {/* Scope & Policy Banner */}
+                  <div className="p-4 bg-[#DBB155]/10 border border-[#DBB155]/30 rounded-sm flex items-start gap-3">
+                    <Info size={18} className="text-[#DBB155] shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <span className="font-semibold text-white block">
+                        Staff Review &amp; Non-Mutation Policy (Ticket M13 / Scope v1.1)
+                      </span>
+                      <p className="text-gray-300 text-[11px] leading-relaxed">
+                        Requests are routed directly to Rosapenna Reservations &amp; Concierge staff and recorded as <strong>pending staff review</strong>.
+                        Submitting a request or cancellation inquiry does <strong>not</strong> automatically cancel bookings, alter dates, hold or release inventory, or mutate payment ledger transactions.
+                      </p>
+                    </div>
+                  </div>
+
+                  {requestError && (
+                    <div className="p-3 bg-red-950/30 border border-red-800/40 rounded text-red-300 flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle size={15} className="shrink-0 text-red-400" />
+                        <span>{requestError}</span>
+                      </div>
+                      {requestError.toLowerCase().includes("conflict") && (
+                        <button
+                          type="button"
+                          onClick={() => loadGuestRequests()}
+                          className="text-[#DBB155] underline hover:text-white cursor-pointer font-semibold text-[11px] shrink-0"
+                        >
+                          Refresh Requests
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {requestSuccessMessage && (
+                    <div className="p-3 bg-emerald-950/30 border border-emerald-800/40 rounded text-emerald-300 flex items-center gap-2 text-xs">
+                      <CheckCircle2 size={15} className="shrink-0 text-emerald-400" />
+                      <span>{requestSuccessMessage}</span>
+                    </div>
+                  )}
+
+                  {/* Request Submission Form */}
+                  <div className="bg-[#111] border border-white/10 p-5 rounded-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-3 gap-2">
+                      <div>
+                        <span className="text-[#DBB155] uppercase tracking-wider font-semibold text-xs flex items-center gap-1.5">
+                          <Send size={14} className="text-[#DBB155]" />
+                          Submit Request to Hotel Reservations
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Ask for assistance when online amendment options do not fit your dates, room configurations, or golf requirements.
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950/40 text-blue-400 border border-blue-800/40">
+                        F12 Delivery Connected
+                      </span>
+                    </div>
+
+                    <form onSubmit={handleSubmitGuestRequest} className="space-y-4">
+                      {/* Request Type Selector (AC 1 & AC 6: Separate cancellation choice) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div
+                          onClick={() => {
+                            setRequestTypeChoice("special_request");
+                            if (requestCategory === "cancellation_inquiry") {
+                              setRequestCategory("general_inquiry");
+                            }
+                          }}
+                          className={`p-3 rounded border cursor-pointer transition-all ${
+                            requestTypeChoice === "special_request"
+                              ? "bg-[#181818] border-[#DBB155] text-white"
+                              : "bg-[#141414] border-white/5 text-gray-400 hover:border-white/20"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 font-semibold text-xs">
+                            <input
+                              type="radio"
+                              name="requestType"
+                              checked={requestTypeChoice === "special_request"}
+                              onChange={() => {}}
+                              className="accent-[#DBB155]"
+                            />
+                            <span>Special Request / Assistance</span>
+                          </div>
+                          <p className="text-[10px] text-gray-400 mt-1 pl-5">
+                            Dietary requests, room proximity, tee-time shifts, or accessibility requirements.
+                          </p>
+                        </div>
+
+                        <div
+                          onClick={() => {
+                            setRequestTypeChoice("cancellation_request");
+                            setRequestCategory("cancellation_inquiry");
+                          }}
+                          className={`p-3 rounded border cursor-pointer transition-all ${
+                            requestTypeChoice === "cancellation_request"
+                              ? "bg-red-950/20 border-red-500/80 text-white"
+                              : "bg-[#141414] border-white/5 text-gray-400 hover:border-white/20"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 font-semibold text-xs">
+                            <input
+                              type="radio"
+                              name="requestType"
+                              checked={requestTypeChoice === "cancellation_request"}
+                              onChange={() => {}}
+                              className="accent-red-500"
+                            />
+                            <span className="text-red-400">Cancellation Request</span>
+                          </div>
+                          <p className="text-[10px] text-gray-400 mt-1 pl-5">
+                            Formal inquiry to cancel part or all of reservation; requires staff review and policy verification.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Category Selection */}
+                      {requestTypeChoice === "special_request" ? (
+                        <div className="space-y-1">
+                          <label className="block text-[11px] text-gray-300 font-semibold">
+                            Request Category:
+                          </label>
+                          <select
+                            value={requestCategory}
+                            onChange={(e) => setRequestCategory(e.target.value as SpecialRequestCategory)}
+                            className="w-full bg-[#181818] border border-white/10 rounded p-2 text-white text-xs outline-none focus:border-[#DBB155]"
+                          >
+                            <option value="general_inquiry">General Inquiry / Help with Dates</option>
+                            <option value="dietary">Dietary Notice (e.g. Coeliac, Vegan, Allergies)</option>
+                            <option value="room_preference">Room Preference (e.g. Ground Floor, Quiet Room)</option>
+                            <option value="golf_preference">Golf Tee-Time or Course Preference</option>
+                            <option value="accessibility">Accessibility / Medical Assistance</option>
+                            <option value="other">Other Inquiry</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-red-950/30 border border-red-800/40 rounded text-[11px] text-red-200 space-y-1">
+                          <span className="font-semibold block text-red-300">Cancellation Policy Notice:</span>
+                          <p>
+                            Cancellation requests are reviewed manually by hotel staff according to confirmed terms (e.g. deposit retention / 6-week balance rule). Submitting this request records your intent with a timestamp but does <strong>not</strong> release your rooms or issue refunds automatically.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Desired Dates / Rooms / Golf context fields (AC 1) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[11px] text-gray-400 mb-1">
+                            Desired Dates (if proposing shift):
+                          </label>
+                          <input
+                            type="text"
+                            value={desiredDates}
+                            onChange={(e) => setDesiredDates(e.target.value)}
+                            placeholder="e.g. 12 Aug - 15 Aug 2027"
+                            className="w-full bg-[#181818] border border-white/10 rounded px-3 py-1.5 text-white text-xs outline-none focus:border-[#DBB155]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-gray-400 mb-1">
+                            Desired Room Preference:
+                          </label>
+                          <input
+                            type="text"
+                            value={desiredRoom}
+                            onChange={(e) => setDesiredRoom(e.target.value)}
+                            placeholder="e.g. 2 Deluxe Rooms adjoining"
+                            className="w-full bg-[#181818] border border-white/10 rounded px-3 py-1.5 text-white text-xs outline-none focus:border-[#DBB155]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-gray-400 mb-1">
+                            Desired Golf Notes:
+                          </label>
+                          <input
+                            type="text"
+                            value={desiredGolf}
+                            onChange={(e) => setDesiredGolf(e.target.value)}
+                            placeholder="e.g. Morning Sandy Hills slot"
+                            className="w-full bg-[#181818] border border-white/10 rounded px-3 py-1.5 text-white text-xs outline-none focus:border-[#DBB155]"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Free-text request area */}
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-gray-300 font-semibold">
+                          Details of Request / Notes for Staff (Min 5 characters):
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={requestText}
+                          onChange={(e) => setRequestText(e.target.value)}
+                          placeholder={
+                            requestTypeChoice === "cancellation_request"
+                              ? "Please specify the reason for cancellation inquiry and whether full or partial booking cancellation is requested..."
+                              : "e.g. Please arrange adjacent ground floor rooms for elderly parents; dietary notice: 1 guest requires gluten-free meals..."
+                          }
+                          className="w-full bg-[#161616] border border-white/10 p-3 text-white text-xs rounded-sm outline-none focus:border-[#DBB155] resize-none"
+                        />
+                      </div>
+
+                      {/* Submit Action */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                        <p className="text-[11px] text-gray-500">
+                          * An official email acknowledgement will be sent to <span className="font-mono text-gray-300">{bookingData.lead_guest_email || "email on file"}</span> upon receipt.
+                        </p>
+                        <button
+                          type="submit"
+                          disabled={isSubmittingRequest || requestText.trim().length < 5}
+                          className="w-full sm:w-auto px-6 py-2.5 bg-[#DBB155] hover:bg-[#c9a04a] disabled:bg-gray-700 disabled:text-gray-400 text-black font-bold uppercase tracking-wider text-xs rounded transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          {isSubmittingRequest ? (
+                            <>
+                              <Loader2 size={13} className="animate-spin" /> Submitting...
+                            </>
+                          ) : (
+                            <>
+                              <Send size={13} /> Submit Request
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Submitted Requests History Card (AC 7: dated request status) */}
+                  <div className="bg-[#111] border border-white/10 p-5 rounded-sm space-y-4">
+                    <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                      <div>
+                        <span className="text-white font-semibold text-xs uppercase tracking-wider">
+                          Your Submitted Requests &amp; Review Status
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Track pending and reviewed inquiries submitted for Booking <strong className="text-white">{bookingData.booking_reference}</strong>.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => loadGuestRequests()}
+                        disabled={isLoadingRequests}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw size={12} className={isLoadingRequests ? "animate-spin" : ""} /> Reload
+                      </button>
+                    </div>
+
+                    {isLoadingRequests ? (
+                      <div className="p-6 text-center text-gray-400 flex items-center justify-center gap-2 text-xs">
+                        <Loader2 size={15} className="animate-spin text-[#DBB155]" />
+                        <span>Loading submitted requests...</span>
+                      </div>
+                    ) : requestsList && requestsList.requests.length > 0 ? (
+                      <div className="space-y-3">
+                        {requestsList.requests.map((item) => (
+                          <div
+                            key={item.request_id}
+                            className="p-3.5 bg-[#161616] border border-white/5 rounded space-y-2"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-white/5 pb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[11px] text-[#DBB155] font-semibold">
+                                  {item.request_id}
+                                </span>
+                                <span className="text-xs font-semibold text-white">
+                                  {item.request_type === "cancellation_request" ? (
+                                    <span className="text-red-400">Cancellation Request</span>
+                                  ) : (
+                                    <span>Special Request ({item.category.replace("_", " ")})</span>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-gray-400">
+                                  Submitted: {new Date(item.submitted_at).toLocaleDateString()}
+                                </span>
+                                <span
+                                  className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${
+                                    item.status === "approved"
+                                      ? "bg-emerald-950/40 text-emerald-300 border border-emerald-800/40"
+                                      : item.status === "declined"
+                                      ? "bg-red-950/40 text-red-300 border border-red-800/40"
+                                      : "bg-amber-950/40 text-amber-300 border border-amber-800/40"
+                                  }`}
+                                >
+                                  {item.status.replace("_", " ")}
+                                </span>
+                              </div>
+                            </div>
+
+                            <p className="text-gray-300 text-xs whitespace-pre-wrap leading-relaxed">
+                              {item.request_text}
+                            </p>
+
+                            {(item.desired_dates || item.desired_room_category || item.desired_golf_notes) && (
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-white/5 text-[10px] text-gray-400">
+                                {item.desired_dates && (
+                                  <div>
+                                    <span className="text-gray-500 block">Dates:</span>
+                                    <span className="text-white">{item.desired_dates}</span>
+                                  </div>
+                                )}
+                                {item.desired_room_category && (
+                                  <div>
+                                    <span className="text-gray-500 block">Rooms:</span>
+                                    <span className="text-white">{item.desired_room_category}</span>
+                                  </div>
+                                )}
+                                {item.desired_golf_notes && (
+                                  <div>
+                                    <span className="text-gray-500 block">Golf:</span>
+                                    <span className="text-white">{item.desired_golf_notes}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-gray-400 italic py-3 text-center text-xs">
+                        No special requests or inquiries submitted for this booking yet.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )
             )}
 
             {/* Return Link */}

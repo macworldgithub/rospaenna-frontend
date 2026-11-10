@@ -1162,5 +1162,167 @@ export async function updateRoundCaddyRequest(
   }
 }
 
+// ============================================================================
+// Ticket M13: Special and Cancellation Requests
+// ============================================================================
+
+export type SpecialRequestCategory =
+  | "dietary"
+  | "room_preference"
+  | "golf_preference"
+  | "accessibility"
+  | "cancellation_inquiry"
+  | "general_inquiry"
+  | "other";
+
+export type RequestType = "special_request" | "cancellation_request";
+
+export type RequestReviewStatus =
+  | "pending_review"
+  | "under_review"
+  | "approved"
+  | "declined"
+  | "cancelled";
+
+export interface GuestSpecialRequestCreate {
+  booking_reference: string;
+  request_type: RequestType;
+  category: SpecialRequestCategory;
+  request_text: string;
+  desired_dates?: string | null;
+  desired_room_category?: string | null;
+  desired_golf_notes?: string | null;
+  expected_revision?: number | null;
+}
+
+export interface GuestSpecialRequestItem {
+  request_id: string;
+  booking_reference: string;
+  request_type: RequestType;
+  category: SpecialRequestCategory;
+  request_text: string;
+  desired_dates?: string | null;
+  desired_room_category?: string | null;
+  desired_golf_notes?: string | null;
+  status: RequestReviewStatus;
+  submitted_at: string;
+  email_delivery_id?: string | null;
+  email_delivery_status?: string | null;
+}
+
+export interface GuestSpecialRequestResponse {
+  request_id: string;
+  booking_reference: string;
+  request_type: RequestType;
+  category: SpecialRequestCategory;
+  status: RequestReviewStatus;
+  submitted_at: string;
+  booking_revision: number;
+  replayed: boolean;
+  inventory_mutated: boolean;
+  payment_mutated: boolean;
+  email_delivery_status: string;
+  email_delivery_id?: string | null;
+  message: string;
+  notice: string;
+}
+
+export interface GuestRequestsListResponse {
+  booking_reference: string;
+  booking_revision: number;
+  requests: GuestSpecialRequestItem[];
+  read_at: string;
+}
+
+export async function fetchGuestRequests(
+  bookingReference: string,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: GuestRequestsListResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {};
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(
+      `/api/mmb/requests/${encodeURIComponent(bookingReference.trim().toUpperCase())}`,
+      {
+        method: "GET",
+        headers,
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch guest requests.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching guest requests.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function submitGuestSpecialRequest(
+  bookingReference: string,
+  request: GuestSpecialRequestCreate,
+  sessionToken?: string,
+  idempotencyKey?: string
+): Promise<{ success: boolean; data?: GuestSpecialRequestResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+    const key =
+      idempotencyKey ||
+      (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `idemp_req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+    headers["Idempotency-Key"] = key;
+
+    const res = await fetch(
+      `/api/mmb/requests/${encodeURIComponent(bookingReference.trim().toUpperCase())}`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(request),
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to submit request.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error submitting guest request.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+
 
 

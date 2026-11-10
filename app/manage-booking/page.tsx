@@ -43,6 +43,10 @@ import {
   updateRoundCaddyRequest,
   fetchGuestRequests,
   submitGuestSpecialRequest,
+  fetchBookingReminders,
+  requestRevisedConfirmationSend,
+  getRevisedPdfDownloadUrl,
+  type ScheduledReminderItem,
   type GuestSpecialRequestCreate,
   type GuestSpecialRequestResponse,
   type GuestRequestsListResponse,
@@ -164,6 +168,12 @@ export default function ManageBookingPage() {
   const [requestError, setRequestError] = useState<string | null>(null);
   const [requestSuccessMessage, setRequestSuccessMessage] = useState<string | null>(null);
 
+  // Ticket M15: Pre-arrival reminders and revised confirmation
+  const [reminders, setReminders] = useState<ScheduledReminderItem[]>([]);
+  const [isLoadingReminders, setIsLoadingReminders] = useState(false);
+  const [isSendingRevisedEmail, setIsSendingRevisedEmail] = useState(false);
+  const [revisedEmailMessage, setRevisedEmailMessage] = useState<string | null>(null);
+
   useEffect(() => {
     if (cooldown > 0) {
       const timer = setTimeout(() => setCooldown((c) => c - 1), 1000);
@@ -221,6 +231,7 @@ export default function ManageBookingPage() {
           await loadGuestPhone(bookingRef, token);
           await loadCaddyRoster(bookingRef, token);
           await loadGuestRequests(bookingRef, token);
+          await loadBookingReminders(bookingRef, token);
         }
         setVerified(true);
       } else {
@@ -245,6 +256,7 @@ export default function ManageBookingPage() {
         await loadGuestPhone(bookingRef, sessionToken);
         await loadCaddyRoster(bookingRef, sessionToken);
         await loadGuestRequests(bookingRef, sessionToken);
+        await loadBookingReminders(bookingRef, sessionToken);
       }
     } finally {
       setIsRefreshing(false);
@@ -630,6 +642,43 @@ export default function ManageBookingPage() {
       }
     } finally {
       setIsLoadingRequests(false);
+    }
+  }
+
+  async function loadBookingReminders(refToUse?: string, tokenToUse?: string) {
+    const ref = refToUse || bookingData?.booking_reference || bookingRef;
+    const tok = tokenToUse || sessionToken;
+    if (!ref || !tok) return;
+
+    setIsLoadingReminders(true);
+    try {
+      const res = await fetchBookingReminders(ref, tok);
+      if (res.success && res.data?.reminders) {
+        setReminders(res.data.reminders);
+      }
+    } catch {
+      // non-fatal
+    } finally {
+      setIsLoadingReminders(false);
+    }
+  }
+
+  async function handleSendRevisedEmail() {
+    if (!bookingData?.booking_reference || !sessionToken) return;
+    setIsSendingRevisedEmail(true);
+    setRevisedEmailMessage(null);
+    try {
+      const res = await requestRevisedConfirmationSend(bookingData.booking_reference, sessionToken);
+      if (res.success) {
+        setRevisedEmailMessage("Revised booking confirmation email with updated PDF itinerary dispatched successfully.");
+        await loadBookingReminders(bookingData.booking_reference, sessionToken);
+      } else {
+        setRevisedEmailMessage(res.error || "Failed to dispatch revised confirmation email.");
+      }
+    } catch (err: unknown) {
+      setRevisedEmailMessage(err instanceof Error ? err.message : "Error dispatching revised confirmation email.");
+    } finally {
+      setIsSendingRevisedEmail(false);
     }
   }
 
@@ -1063,15 +1112,27 @@ export default function ManageBookingPage() {
                         </span>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleRefreshBooking}
-                      disabled={isRefreshing}
-                      className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-sm text-[11px] text-gray-300 hover:text-white transition-colors cursor-pointer"
-                    >
-                      <RefreshCw size={12} className={isRefreshing ? "animate-spin text-[#DBB155]" : "text-[#DBB155]"} />
-                      <span>{isRefreshing ? "Refreshing..." : "Refresh Itinerary"}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={getRevisedPdfDownloadUrl(bookingData.booking_reference)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1 bg-[#DBB155]/10 hover:bg-[#DBB155]/20 border border-[#DBB155]/30 rounded-sm text-[11px] text-[#DBB155] transition-colors cursor-pointer"
+                        title="Download authoritative PDF itinerary"
+                      >
+                        <FileText size={12} />
+                        <span>Download PDF</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleRefreshBooking}
+                        disabled={isRefreshing}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-sm text-[11px] text-gray-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <RefreshCw size={12} className={isRefreshing ? "animate-spin text-[#DBB155]" : "text-[#DBB155]"} />
+                        <span>{isRefreshing ? "Refreshing..." : "Refresh Itinerary"}</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Degraded / Unavailable Source Alerts (AC 5) */}
@@ -1391,8 +1452,8 @@ export default function ManageBookingPage() {
                         <span>
                           <strong>Balance Due Date:</strong>{" "}
                           {bookingData.financials.balance_due_date
-                            ? `${bookingData.financials.balance_due_date} (28 days prior to arrival)`
-                            : "28 days prior to arrival"}
+                            ? `${bookingData.financials.balance_due_date} (Strictly 6 weeks / 42 days prior to arrival)`
+                            : "Strictly 6 weeks / 42 days prior to arrival"}
                         </span>
                         <span className="text-gray-500">
                           Transactions on Ledger: {bookingData.financials.payments_count ?? 1} verified
@@ -1440,6 +1501,128 @@ export default function ManageBookingPage() {
                           <p>No active pending amendment or special requests.</p>
                           <p className="text-[11px] text-gray-500 mt-1">
                             To request date changes, tee-time shifts, or dietary notices, navigate to the Live Amendments or Special Requests tabs.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card 5: Pre-Arrival Communications & Scheduled Reminders (Ticket M15) */}
+                    <div className="md:col-span-2 bg-[#111] border border-white/10 p-5 rounded-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-3 gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Mail size={15} className="text-[#DBB155]" />
+                            <span className="text-white font-semibold uppercase tracking-wider text-xs">
+                              Authoritative Communications &amp; Milestone Reminders
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-gray-400 block mt-0.5">
+                            Pre-arrival emails are scheduled against Rosapenna's strict 42-day balance policy and verified arrival date.
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSendRevisedEmail}
+                            disabled={isSendingRevisedEmail}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-sm text-[11px] text-gray-200 hover:text-white transition-colors cursor-pointer"
+                          >
+                            {isSendingRevisedEmail ? (
+                              <Loader2 size={12} className="animate-spin text-[#DBB155]" />
+                            ) : (
+                              <Send size={12} className="text-[#DBB155]" />
+                            )}
+                            <span>{isSendingRevisedEmail ? "Dispatching..." : "Send Revised Confirmation"}</span>
+                          </button>
+                          <a
+                            href={getRevisedPdfDownloadUrl(bookingData.booking_reference)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 px-3 py-1 bg-[#DBB155]/10 hover:bg-[#DBB155]/20 border border-[#DBB155]/30 rounded-sm text-[11px] text-[#DBB155] transition-colors cursor-pointer"
+                          >
+                            <FileText size={12} />
+                            <span>PDF Itinerary</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      {revisedEmailMessage && (
+                        <div className="p-3 bg-[#181818] border border-white/10 rounded-sm text-xs text-gray-200 flex items-center gap-2">
+                          <Info size={14} className="text-[#DBB155] shrink-0" />
+                          <span>{revisedEmailMessage}</span>
+                        </div>
+                      )}
+
+                      {isLoadingReminders ? (
+                        <div className="p-4 text-center text-gray-400 flex items-center justify-center gap-2">
+                          <Loader2 size={14} className="animate-spin text-[#DBB155]" />
+                          <span>Loading scheduled communications...</span>
+                        </div>
+                      ) : reminders && reminders.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {reminders.map((rem) => {
+                              const title =
+                                rem.title ||
+                                (rem.reminder_type === "balance_due_first"
+                                  ? "Balance Due Notification (42 Days)"
+                                  : rem.reminder_type === "rooming_and_caddy"
+                                  ? "Rooming & Caddy Questionnaire (42 Days)"
+                                  : rem.reminder_type === "concierge_check"
+                                  ? "Concierge Check & Arrival Brief (14 Days)"
+                                  : rem.reminder_type === "balance_due_final"
+                                  ? "Final Balance Warning (5 Days)"
+                                  : rem.reminder_type);
+
+                              const isDispatched = rem.status === "dispatched";
+                              const isSuppressed = rem.status === "suppressed";
+                              const isCanceled = rem.status === "canceled_by_amendment";
+
+                              return (
+                                <div
+                                  key={rem.reminder_id}
+                                  className="p-3 bg-[#181818] rounded-sm border border-white/5 space-y-1.5"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-white font-medium text-xs">{title}</span>
+                                    <span
+                                      className={`text-[10px] font-mono px-2 py-0.5 rounded border uppercase ${
+                                        isDispatched
+                                          ? "bg-emerald-950/40 text-emerald-300 border-emerald-800/40"
+                                          : isSuppressed
+                                          ? "bg-gray-800/60 text-gray-400 border-gray-700/50"
+                                          : isCanceled
+                                          ? "bg-zinc-800/60 text-zinc-400 border-zinc-700/50"
+                                          : "bg-amber-950/40 text-amber-300 border-amber-800/40"
+                                      }`}
+                                    >
+                                      {rem.status.replace(/_/g, " ")}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-[11px] text-gray-400">
+                                    <span>Target Date: <strong className="text-gray-300">{rem.scheduled_date}</strong></span>
+                                    <span className="font-mono text-gray-500">Rev #{rem.revision_number}</span>
+                                  </div>
+                                  {rem.suppression_reason && (
+                                    <p className="text-[10px] text-gray-400 italic">
+                                      Note: {rem.suppression_reason}
+                                    </p>
+                                  )}
+                                  {isDispatched && rem.dispatched_at && (
+                                    <p className="text-[10px] text-emerald-400/90 font-mono">
+                                      Dispatched: {new Date(rem.dispatched_at).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-[#141414] rounded-sm text-center text-gray-400 text-xs">
+                          <p>All automated pre-arrival milestones are synchronized with current booking status.</p>
+                          <p className="text-[11px] text-gray-500 mt-1">
+                            Dispatches trigger automatically strictly according to schedule, with dual staff notification copies sent to Reservations.
                           </p>
                         </div>
                       )}
@@ -2135,6 +2318,20 @@ export default function ManageBookingPage() {
                                                     <span className="text-emerald-400 font-semibold block">Email Confirmation:</span>
                                                     <span className="text-gray-300">{commitResult.email_delivery_id ? "Dispatched" : "Queued"}</span>
                                                   </div>
+                                                </div>
+                                                <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-emerald-800/30">
+                                                  <span className="text-[11px] text-emerald-300/80">
+                                                    Authoritative PDF itinerary regenerated for Revision #{commitResult.new_booking_revision}.
+                                                  </span>
+                                                  <a
+                                                    href={getRevisedPdfDownloadUrl(bookingData?.booking_reference || bookingRef)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-800/60 hover:bg-emerald-700/60 border border-emerald-600/50 rounded text-xs font-semibold text-white transition-colors cursor-pointer"
+                                                  >
+                                                    <FileText size={13} />
+                                                    <span>Download Revised PDF</span>
+                                                  </a>
                                                 </div>
                                               </div>
                                             ) : (

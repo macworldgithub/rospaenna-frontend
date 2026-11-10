@@ -1538,6 +1538,209 @@ export async function retryStaffRequestNotification(
   }
 }
 
+// ----------------------------------------------------------------------------
+// Ticket M15: Revised Confirmations, PDF Itineraries, & Pre-Arrival Reminders
+// ----------------------------------------------------------------------------
+
+export type ReminderType =
+  | "balance_due_first"
+  | "rooming_and_caddy"
+  | "concierge_check"
+  | "balance_due_final";
+
+export type ReminderStatus =
+  | "scheduled"
+  | "canceled_by_amendment"
+  | "suppressed"
+  | "dispatched"
+  | "failed";
+
+export interface ScheduledReminderItem {
+  reminder_id: string;
+  booking_reference: string;
+  revision_number: number;
+  reminder_type: ReminderType;
+  title: string;
+  scheduled_date: string;
+  target_lead_time_days: number;
+  status: ReminderStatus;
+  suppression_reason?: string | null;
+  dispatched_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ScheduledReminderListResponse {
+  booking_reference: string;
+  active_revision: number;
+  arrival_date?: string | null;
+  balance_due_date?: string | null;
+  reminders: ScheduledReminderItem[];
+}
+
+export interface RevisedConfirmationSendResponse {
+  booking_reference: string;
+  revision_number: number;
+  delivery_result: {
+    success: boolean;
+    delivery_id: string;
+    template: string;
+    recipient: string;
+    hotel_notified: boolean;
+    pdf_attached: boolean;
+    subject: string;
+    status: string;
+    sent_at: string;
+    error_message?: string | null;
+    idempotency_replayed?: boolean;
+  };
+}
+
+export function getRevisedPdfDownloadUrl(bookingReference: string): string {
+  return `/api/mmb/confirmations/${encodeURIComponent(bookingReference.trim().toUpperCase())}/pdf`;
+}
+
+export async function fetchBookingReminders(
+  bookingReference: string,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: ScheduledReminderListResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {};
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(
+      `/api/mmb/confirmations/${encodeURIComponent(bookingReference.trim().toUpperCase())}/reminders`,
+      {
+        method: "GET",
+        headers,
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch scheduled reminders.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching scheduled reminders.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function requestRevisedConfirmationSend(
+  bookingReference: string,
+  sessionToken?: string,
+  idempotencyKey?: string
+): Promise<{ success: boolean; data?: RevisedConfirmationSendResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+    const key =
+      idempotencyKey ||
+      (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `idemp_rev_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+
+    headers["X-Idempotency-Key"] = key;
+
+    const res = await fetch(
+      `/api/mmb/confirmations/${encodeURIComponent(bookingReference.trim().toUpperCase())}/send`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ idempotency_key: key }),
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to send revised confirmation email.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error sending revised confirmation.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function dispatchBookingReminder(
+  bookingReference: string,
+  reminderId: string,
+  sessionToken?: string,
+  idempotencyKey?: string
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+    const key =
+      idempotencyKey ||
+      (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `idemp_disp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+
+    headers["X-Idempotency-Key"] = key;
+
+    const res = await fetch(
+      `/api/mmb/confirmations/${encodeURIComponent(bookingReference.trim().toUpperCase())}/reminders/${encodeURIComponent(reminderId.trim())}/dispatch`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ idempotency_key: key }),
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to dispatch reminder.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error dispatching reminder.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+
 
 
 

@@ -37,6 +37,10 @@ import {
   commitAmendment,
   fetchOccupantRoster,
   updateOccupantRoster,
+  fetchGuestPhone,
+  updateGuestPhone,
+  type GuestPhoneReadResponse,
+  type GuestPhoneUpdateResponse,
   type OccupantRosterResponse,
   type OccupantDetail,
   type BedPreferenceType,
@@ -114,6 +118,13 @@ export default function ManageBookingPage() {
   const [isSavingOccupants, setIsSavingOccupants] = useState(false);
   const [occupantSuccessMessage, setOccupantSuccessMessage] = useState<string | null>(null);
 
+  // Ticket M11: Lead Guest Phone Updates state
+  const [guestPhone, setGuestPhone] = useState<string>("");
+  const [currentPhoneSnapshot, setCurrentPhoneSnapshot] = useState<GuestPhoneReadResponse | null>(null);
+  const [isLoadingPhone, setIsLoadingPhone] = useState(false);
+  const [isUpdatingPhone, setIsUpdatingPhone] = useState(false);
+  const [phoneMessage, setPhoneMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   useEffect(() => {
     if (cooldown > 0) {
       const timer = setTimeout(() => setCooldown((c) => c - 1), 1000);
@@ -168,6 +179,7 @@ export default function ManageBookingPage() {
             setAmendRoomQty(bookingRes.booking.stay.room_quantity || 1);
           }
           await loadOccupantRoster(bookingRef, token);
+          await loadGuestPhone(bookingRef, token);
         }
         setVerified(true);
       } else {
@@ -189,6 +201,7 @@ export default function ManageBookingPage() {
           setAmendArrival(bookingRes.booking.stay.arrival_date || "");
           setAmendDeparture(bookingRes.booking.stay.departure_date || "");
         }
+        await loadGuestPhone(bookingRef, sessionToken);
       }
     } finally {
       setIsRefreshing(false);
@@ -427,6 +440,68 @@ export default function ManageBookingPage() {
     }
   }
 
+  async function loadGuestPhone(refToUse?: string, tokenToUse?: string) {
+    const ref = refToUse || bookingData?.booking_reference || bookingRef;
+    const tok = tokenToUse || sessionToken;
+    if (!ref || !tok) return;
+
+    setIsLoadingPhone(true);
+    try {
+      const res = await fetchGuestPhone(ref, tok);
+      if (res.success && res.data) {
+        setCurrentPhoneSnapshot(res.data);
+        setGuestPhone(res.data.phone_number || "");
+      }
+    } finally {
+      setIsLoadingPhone(false);
+    }
+  }
+
+  async function handleUpdatePhone(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sessionToken || !bookingData || !currentPhoneSnapshot) return;
+    setPhoneMessage(null);
+    setIsUpdatingPhone(true);
+
+    try {
+      const res = await updateGuestPhone(
+        bookingData.booking_reference,
+        {
+          phone_number: guestPhone.trim(),
+          expected_revision: currentPhoneSnapshot.booking_revision,
+          contact_version: currentPhoneSnapshot.contact_version,
+        },
+        sessionToken
+      );
+
+      if (res.success && res.data) {
+        setPhoneMessage({
+          type: "success",
+          text: res.data.message || "Telephone number updated and verified in Opera PMS.",
+        });
+        setCurrentPhoneSnapshot((prev) =>
+          prev
+            ? {
+                ...prev,
+                phone_number: res.data!.phone_number,
+                masked_phone: res.data!.masked_phone,
+                booking_revision: res.data!.booking_revision,
+                contact_version: res.data!.contact_version,
+              }
+            : null
+        );
+        await handleRefreshBooking();
+      } else {
+        setPhoneMessage({
+          type: "error",
+          text: res.error || "Failed to update telephone number.",
+        });
+      }
+    } finally {
+      setIsUpdatingPhone(false);
+    }
+  }
+
   async function handleLogout() {
     if (sessionToken) {
       await logoutMmbSession(sessionToken);
@@ -440,6 +515,9 @@ export default function ManageBookingPage() {
     setAuthError(null);
     setAmendmentResponse(null);
     setAmendmentError(null);
+    setGuestPhone("");
+    setCurrentPhoneSnapshot(null);
+    setPhoneMessage(null);
   }
 
   async function checkStatus() {
@@ -951,6 +1029,131 @@ export default function ManageBookingPage() {
                       <div className="pt-2 border-t border-white/5 text-[11px] text-gray-500 flex items-center justify-between">
                         <span>Caddy &amp; Buggy Service</span>
                         <span className="text-gray-400">Request via Golf Pavilion (+353 (0)74 91 55000)</span>
+                      </div>
+                    </div>
+
+                    {/* Lead Guest Contact & Telephone (Ticket M11) */}
+                    <div className="md:col-span-2 bg-[#111] border border-white/5 p-5 rounded-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-2 gap-1">
+                        <div>
+                          <span className="text-[#DBB155] uppercase tracking-wider font-semibold flex items-center gap-1.5">
+                            <Phone size={14} className="text-[#DBB155]" />
+                            Lead Guest Contact &amp; Telephone Details
+                          </span>
+                          <span className="text-[11px] text-gray-400">
+                            Authoritative phone contact for reservation notifications and hotel communications.
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950/40 text-blue-400 border border-blue-800/40">
+                          Opera PMS Synchronized
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Read-Only Lead Guest & Email */}
+                        <div className="space-y-3 bg-[#151515] p-3.5 rounded-sm border border-white/5">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-400">Lead Guest:</span>
+                            <span className="font-semibold text-white">
+                              {currentPhoneSnapshot?.lead_guest_name || bookingData.lead_guest_name}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-400 flex items-center gap-1">
+                              <Mail size={12} className="text-gray-400" />
+                              Primary Email:
+                            </span>
+                            <div className="flex items-center gap-1.5 text-right">
+                              <span className="text-white font-mono">{bookingData.lead_guest_email || "Email on file"}</span>
+                              <span
+                                className="inline-flex items-center gap-0.5 text-[10px] text-gray-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/10"
+                                title="Security policy: Lead guest email can only be updated with hotel staff"
+                              >
+                                <Lock size={10} /> Locked
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-gray-400">Booking Revision:</span>
+                            <span className="text-gray-300 font-mono">
+                              Rev {currentPhoneSnapshot?.booking_revision ?? 1}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 italic pt-1 border-t border-white/5">
+                            * Lead ownership and email are security-locked to prevent unauthorized reassignment. To change ownership or email, contact hotel reservations.
+                          </p>
+                        </div>
+
+                        {/* Phone Update Form */}
+                        <div className="space-y-3 bg-[#151515] p-3.5 rounded-sm border border-white/5">
+                          <form onSubmit={handleUpdatePhone} className="space-y-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                                Authoritative Telephone Number:
+                              </label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="tel"
+                                  value={guestPhone}
+                                  onChange={(e) => setGuestPhone(e.target.value)}
+                                  placeholder="e.g. +353 74 915 5000"
+                                  disabled={isUpdatingPhone || isLoadingPhone}
+                                  className="flex-1 bg-black/60 border border-white/20 rounded-sm px-3 py-1.5 text-white font-mono text-xs focus:border-[#DBB155] focus:outline-none disabled:opacity-50"
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={isUpdatingPhone || isLoadingPhone || !guestPhone.trim()}
+                                  className="px-4 py-1.5 bg-[#DBB155] hover:bg-[#c9a047] text-black font-semibold text-xs rounded-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                                >
+                                  {isUpdatingPhone ? (
+                                    <>
+                                      <Loader2 size={12} className="animate-spin" />
+                                      Saving...
+                                    </>
+                                  ) : (
+                                    "Update Phone"
+                                  )}
+                                </button>
+                              </div>
+                              <span className="text-[10px] text-gray-400 block mt-1">
+                                Accepts international format with country code (e.g. +353 74 915 5000) or national format.
+                              </span>
+                            </div>
+
+                            {phoneMessage && (
+                              <div
+                                className={`p-2.5 rounded-sm text-xs flex items-start gap-2 ${
+                                  phoneMessage.type === "success"
+                                    ? "bg-emerald-950/40 border border-emerald-800/50 text-emerald-300"
+                                    : "bg-red-950/40 border border-red-800/50 text-red-300"
+                                }`}
+                              >
+                                {phoneMessage.type === "success" ? (
+                                  <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-emerald-400" />
+                                ) : (
+                                  <AlertCircle size={14} className="shrink-0 mt-0.5 text-red-400" />
+                                )}
+                                <div className="flex-1">
+                                  <span>{phoneMessage.text}</span>
+                                  {phoneMessage.type === "error" && phoneMessage.text.includes("refresh") && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        await handleRefreshBooking();
+                                        if (bookingData && sessionToken) {
+                                          await loadGuestPhone(bookingData.booking_reference, sessionToken);
+                                        }
+                                      }}
+                                      className="block mt-1 text-[#DBB155] underline hover:text-white cursor-pointer font-semibold text-[11px]"
+                                    >
+                                      Click here to refresh itinerary
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </form>
+                        </div>
                       </div>
                     </div>
 

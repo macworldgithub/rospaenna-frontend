@@ -27,6 +27,7 @@ export interface MmbBookingSummary {
   booking_revision?: number;
   source_channel: string;
   lead_guest_name: string;
+  lead_guest_email?: string;
   stay?: {
     arrival_date: string;
     departure_date: string;
@@ -877,6 +878,125 @@ export async function commitAmendment(
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Network error committing amendment.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+// ============================================================================
+// Ticket M11: Guest Phone Updates
+// ============================================================================
+
+export interface GuestPhoneReadResponse {
+  booking_reference: string;
+  lead_guest_name: string;
+  phone_number?: string | null;
+  masked_phone: string;
+  booking_revision: number;
+  contact_version: string;
+  source_status: "confirmed" | "unavailable";
+  read_at: string;
+}
+
+export interface GuestPhoneUpdateRequest {
+  phone_number: string;
+  expected_revision: number;
+  contact_version?: string | null;
+}
+
+export interface GuestPhoneUpdateResponse {
+  operation_id: string;
+  booking_reference: string;
+  phone_number: string;
+  masked_phone: string;
+  booking_revision: number;
+  contact_version: string;
+  status: "confirmed" | "reconciliation_required" | "conflict" | "rejected";
+  verified_via_readback: boolean;
+  staff_review_required: boolean;
+  replayed: boolean;
+  message: string;
+  updated_at: string;
+}
+
+export async function fetchGuestPhone(
+  bookingReference: string,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: GuestPhoneReadResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {};
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(`/api/mmb/contact/${encodeURIComponent(bookingReference.trim().toUpperCase())}/phone`, {
+      method: "GET",
+      headers,
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch guest phone contact details.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching guest phone contact.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function updateGuestPhone(
+  bookingReference: string,
+  request: GuestPhoneUpdateRequest,
+  sessionToken?: string,
+  idempotencyKey?: string
+): Promise<{ success: boolean; data?: GuestPhoneUpdateResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+    const key =
+      idempotencyKey ||
+      (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `idemp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+    headers["Idempotency-Key"] = key;
+
+    const res = await fetch(`/api/mmb/contact/${encodeURIComponent(bookingReference.trim().toUpperCase())}/phone`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to update guest phone number.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error updating guest phone number.";
     return {
       success: false,
       error: message,

@@ -23,6 +23,8 @@ import {
   Info,
   CreditCard,
   ExternalLink,
+  History,
+  Clock,
 } from "lucide-react";
 import {
   requestOtp,
@@ -46,6 +48,16 @@ import {
   fetchBookingReminders,
   requestRevisedConfirmationSend,
   getRevisedPdfDownloadUrl,
+  fetchGuestHistory,
+  fetchStaffHistory,
+  fetchRecoveryExceptions,
+  retryRecoveryOperation,
+  type TimelineEvent,
+  type GuestActionHistoryResponse,
+  type StaffActionHistoryResponse,
+  type RecoveryExceptionItem,
+  type StaffRecoveryExceptionsListResponse,
+  type StaffRecoveryRetryResponse,
   type ScheduledReminderItem,
   type GuestSpecialRequestCreate,
   type GuestSpecialRequestResponse,
@@ -80,7 +92,7 @@ interface MmbStatus {
 export default function ManageBookingPage() {
   const [status, setStatus] = useState<MmbStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "amend" | "rooming" | "requests">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "amend" | "rooming" | "requests" | "history">("dashboard");
 
   // Guest authentication and session state
   const [bookingRef, setBookingRef] = useState("RSP-20270514-TEST01");
@@ -174,6 +186,19 @@ export default function ManageBookingPage() {
   const [isSendingRevisedEmail, setIsSendingRevisedEmail] = useState(false);
   const [revisedEmailMessage, setRevisedEmailMessage] = useState<string | null>(null);
 
+  // Ticket M16: Action History and Staff Recovery state
+  const [historyData, setHistoryData] = useState<GuestActionHistoryResponse | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  // Staff Recovery Console state
+  const [staffTokenInput, setStaffTokenInput] = useState("");
+  const [staffExceptions, setStaffExceptions] = useState<RecoveryExceptionItem[]>([]);
+  const [isLoadingExceptions, setIsLoadingExceptions] = useState(false);
+  const [exceptionsError, setExceptionsError] = useState<string | null>(null);
+  const [recoveryRetryingId, setRecoveryRetryingId] = useState<string | null>(null);
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
+
   useEffect(() => {
     if (cooldown > 0) {
       const timer = setTimeout(() => setCooldown((c) => c - 1), 1000);
@@ -232,6 +257,7 @@ export default function ManageBookingPage() {
           await loadCaddyRoster(bookingRef, token);
           await loadGuestRequests(bookingRef, token);
           await loadBookingReminders(bookingRef, token);
+          await loadBookingHistory(bookingRef, token);
         }
         setVerified(true);
       } else {
@@ -257,6 +283,7 @@ export default function ManageBookingPage() {
         await loadCaddyRoster(bookingRef, sessionToken);
         await loadGuestRequests(bookingRef, sessionToken);
         await loadBookingReminders(bookingRef, sessionToken);
+        await loadBookingHistory(bookingRef, sessionToken);
       }
     } finally {
       setIsRefreshing(false);
@@ -682,6 +709,79 @@ export default function ManageBookingPage() {
     }
   }
 
+  async function loadBookingHistory(refToUse?: string, tokenToUse?: string) {
+    const ref = refToUse || bookingData?.booking_reference || bookingRef;
+    const tok = tokenToUse || sessionToken;
+    if (!ref || !tok) return;
+
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+    try {
+      const res = await fetchGuestHistory(ref, tok);
+      if (res.success && res.data) {
+        setHistoryData(res.data);
+      } else {
+        setHistoryError(res.error || "Failed to load booking action history.");
+      }
+    } catch {
+      setHistoryError("Network error loading action history.");
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }
+
+  async function handleLoadStaffExceptions() {
+    if (!staffTokenInput.trim()) {
+      setExceptionsError("Please provide a valid staff authorization token.");
+      return;
+    }
+    setIsLoadingExceptions(true);
+    setExceptionsError(null);
+    setRecoveryMessage(null);
+    try {
+      const res = await fetchRecoveryExceptions(staffTokenInput.trim(), {
+        booking_reference: bookingData?.booking_reference || bookingRef,
+      });
+      if (res.success && res.data) {
+        setStaffExceptions(res.data.exceptions || []);
+      } else {
+        setExceptionsError(res.error || "Failed to load staff recovery exceptions.");
+      }
+    } catch (err: unknown) {
+      setExceptionsError(err instanceof Error ? err.message : "Error fetching exceptions.");
+    } finally {
+      setIsLoadingExceptions(false);
+    }
+  }
+
+  async function handleRetryOperation(operationId: string) {
+    if (!staffTokenInput.trim()) {
+      setExceptionsError("Staff authorization token required for recovery retry.");
+      return;
+    }
+    setRecoveryRetryingId(operationId);
+    setRecoveryMessage(null);
+    setExceptionsError(null);
+    try {
+      const res = await retryRecoveryOperation(staffTokenInput.trim(), operationId, {
+        staff_notes: "Automated retry triggered via Staff Recovery console.",
+      });
+      if (res.success && res.data) {
+        setRecoveryMessage(
+          `Operation ${operationId} ${res.data.outcome.replace("_", " ")}: ${res.data.message} (Stage: ${res.data.stage})`
+        );
+        await handleRefreshBooking();
+        await handleLoadStaffExceptions();
+      } else {
+        setExceptionsError(res.error || "Recovery retry failed.");
+      }
+    } catch (err: unknown) {
+      setExceptionsError(err instanceof Error ? err.message : "Network error executing recovery retry.");
+    } finally {
+      setRecoveryRetryingId(null);
+    }
+  }
+
   async function handleSubmitGuestRequest(e: React.FormEvent) {
     e.preventDefault();
     if (!sessionToken || !bookingData) return;
@@ -1082,6 +1182,22 @@ export default function ManageBookingPage() {
                 }`}
               >
                 <FileText size={14} /> 4. Special Requests
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("history");
+                  if (!historyData) {
+                    loadBookingHistory();
+                  }
+                }}
+                className={`pb-2.5 px-4 flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  activeTab === "history"
+                    ? "border-b-2 border-[#DBB155] text-[#DBB155]"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <History size={14} /> 5. Action History &amp; Recovery
               </button>
             </div>
 
@@ -2344,6 +2460,16 @@ export default function ManageBookingPage() {
                                                 <p className="text-[11px] text-amber-300/80">
                                                   Your original reservation remains intact and confirmed. Supported compensation protected your booking. Rosapenna staff has been alerted to review. Call +353 (0)74 91 55000 with reference <strong className="font-mono text-white">{commitResult.operation_id}</strong>.
                                                 </p>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setActiveTab("history");
+                                                    loadBookingHistory();
+                                                  }}
+                                                  className="mt-1 text-xs text-[#DBB155] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                                                >
+                                                  <History size={12} /> View in Action History &amp; Timeline &rarr;
+                                                </button>
                                               </div>
                                             )}
                                           </div>
@@ -3481,6 +3607,273 @@ export default function ManageBookingPage() {
                       <p className="text-gray-400 italic py-3 text-center text-xs">
                         No special requests or inquiries submitted for this booking yet.
                       </p>
+                    )}
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* Tab 5: Action History and Recovery View (Ticket M16) */}
+            {activeTab === "history" && (
+              !verified || !bookingData ? (
+                <div className="bg-[#111] border border-white/5 p-8 rounded-sm text-center space-y-4">
+                  <div className="w-12 h-12 rounded-full bg-[#DBB155]/10 border border-[#DBB155]/20 flex items-center justify-center mx-auto text-[#DBB155]">
+                    <Lock size={20} />
+                  </div>
+                  <h3 className="text-base font-serif font-bold text-white">Authentication Required</h3>
+                  <p className="text-xs text-gray-400 max-w-md mx-auto">
+                    Please complete Stage 1 to sign in and review the durable action history for your booking.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Timeline Header Card */}
+                  <div className="bg-[#111] border border-white/5 p-5 rounded-sm space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-sm font-serif font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <History size={16} className="text-[#DBB155]" />
+                          Booking Action History &amp; Protection Timeline
+                        </h2>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Dated record of accepted offers, confirmed writes, special requests, and notifications. Original reservations remain protected across all operations.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-[#DBB155]/10 text-[#DBB155] border border-[#DBB155]/30">
+                          Revision {historyData?.booking_revision || bookingData.booking_revision || 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => loadBookingHistory()}
+                          disabled={isLoadingHistory}
+                          className="px-2.5 py-1 text-xs border border-white/20 rounded bg-white/5 hover:bg-white/10 text-white flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          <RefreshCw size={12} className={isLoadingHistory ? "animate-spin" : ""} />
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+
+                    {historyError && (
+                      <div className="p-3 bg-red-950/20 border border-red-800/40 rounded text-xs text-red-300 flex items-center gap-2">
+                        <AlertCircle size={14} className="shrink-0 text-red-400" />
+                        <span>{historyError}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Timeline Events List */}
+                  <div className="bg-[#111] border border-white/5 p-5 rounded-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                      <span className="text-xs font-semibold text-white uppercase tracking-wider">
+                        Timeline Events ({historyData?.events?.length || 0})
+                      </span>
+                      {historyData?.read_at && (
+                        <span className="text-[10px] text-gray-500 font-mono">
+                          Synchronized: {new Date(historyData.read_at).toLocaleTimeString()}
+                        </span>
+                      )}
+                    </div>
+
+                    {isLoadingHistory && !historyData ? (
+                      <div className="py-8 text-center text-xs text-gray-400 flex items-center justify-center gap-2">
+                        <Loader2 size={16} className="animate-spin text-[#DBB155]" />
+                        <span>Loading verified action history...</span>
+                      </div>
+                    ) : historyData && historyData.events && historyData.events.length > 0 ? (
+                      <div className="space-y-3">
+                        {historyData.events.map((ev) => (
+                          <div
+                            key={ev.event_id}
+                            className={`p-3.5 rounded border transition-colors ${
+                              ev.is_exception
+                                ? "bg-amber-950/20 border-amber-800/50"
+                                : "bg-[#161616] border-white/5"
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-white/5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-[10px] text-gray-400">
+                                  {new Date(ev.timestamp).toLocaleString()}
+                                </span>
+                                <span
+                                  className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded ${
+                                    ev.category === "payment"
+                                      ? "bg-emerald-950/40 text-emerald-300 border border-emerald-800/40"
+                                      : ev.category === "amendment"
+                                      ? "bg-amber-950/40 text-amber-300 border border-amber-800/40"
+                                      : ev.category === "notification"
+                                      ? "bg-sky-950/40 text-sky-300 border border-sky-800/40"
+                                      : ev.category === "exception"
+                                      ? "bg-red-950/40 text-red-300 border border-red-800/40"
+                                      : "bg-blue-950/40 text-blue-300 border border-blue-800/40"
+                                  }`}
+                                >
+                                  {ev.category}
+                                </span>
+                                <span className="text-[10px] text-gray-300 font-medium">
+                                  Actor: {ev.actor_label}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono text-gray-400">
+                                  Rev {ev.booking_revision}
+                                </span>
+                                {ev.status_badge && (
+                                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/5 text-gray-200 border border-white/10">
+                                    {ev.status_badge}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="pt-2">
+                              <p className="text-xs font-semibold text-white leading-snug">
+                                {ev.summary}
+                              </p>
+                              {ev.details && (
+                                <p className="text-[11px] text-gray-400 mt-1 whitespace-pre-wrap leading-relaxed">
+                                  {ev.details}
+                                </p>
+                              )}
+                            </div>
+
+                            {ev.is_exception && (
+                              <div className="mt-2.5 p-2 bg-amber-900/20 border border-amber-700/30 rounded text-[11px] text-amber-200 flex items-start gap-1.5">
+                                <ShieldCheck size={14} className="shrink-0 text-amber-400 mt-0.5" />
+                                <div>
+                                  <span className="font-semibold block text-amber-300">
+                                    Original Booking Protected:
+                                  </span>
+                                  <span>
+                                    Your confirmed reservation remains intact. Rosapenna staff has been alerted to review and reconcile without duplicate charges.
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-gray-400 italic py-4 text-center text-xs">
+                        No history entries recorded yet for this booking.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Staff Recovery Console (Collapsible / Role Gated) */}
+                  <div className="bg-[#111] border border-white/5 p-5 rounded-sm space-y-4">
+                    <div className="border-b border-white/10 pb-3">
+                      <h3 className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+                        <ShieldAlert size={14} className="text-[#DBB155]" />
+                        Staff Operations &amp; Recovery Console
+                      </h3>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        Authorized staff can inspect unconfirmed reconciliations, partial writes, and notification failures with automated safe retry capabilities.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="password"
+                        placeholder="Staff Authorization Token..."
+                        value={staffTokenInput}
+                        onChange={(e) => setStaffTokenInput(e.target.value)}
+                        className="bg-[#181818] border border-white/10 rounded px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#DBB155] grow"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleLoadStaffExceptions}
+                        disabled={isLoadingExceptions || !staffTokenInput.trim()}
+                        className="px-3 py-1.5 bg-[#DBB155] text-black rounded text-xs font-semibold hover:bg-[#c9a044] transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 justify-center"
+                      >
+                        {isLoadingExceptions && <Loader2 size={12} className="animate-spin" />}
+                        Inspect Exceptions
+                      </button>
+                    </div>
+
+                    {exceptionsError && (
+                      <div className="p-3 bg-red-950/20 border border-red-800/40 rounded text-xs text-red-300 flex items-center gap-2">
+                        <AlertCircle size={14} className="shrink-0 text-red-400" />
+                        <span>{exceptionsError}</span>
+                      </div>
+                    )}
+
+                    {recoveryMessage && (
+                      <div className="p-3 bg-emerald-950/20 border border-emerald-800/40 rounded text-xs text-emerald-300 flex items-center gap-2">
+                        <CheckCircle2 size={14} className="shrink-0 text-emerald-400" />
+                        <span>{recoveryMessage}</span>
+                      </div>
+                    )}
+
+                    {staffExceptions.length > 0 && (
+                      <div className="space-y-3 pt-2">
+                        <span className="text-[11px] font-semibold text-gray-300 block">
+                          Active Exceptions Requiring Reconciliation ({staffExceptions.length})
+                        </span>
+                        {staffExceptions.map((exc) => (
+                          <div
+                            key={exc.exception_id}
+                            className="p-3.5 bg-[#161616] border border-white/10 rounded space-y-2"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[#DBB155] font-semibold">
+                                  {exc.operation_id || exc.request_id || exc.exception_id}
+                                </span>
+                                <span className="font-mono uppercase text-[10px] px-1.5 py-0.5 rounded bg-red-950/40 text-red-300 border border-red-800/40">
+                                  {exc.exception_type.replace("_", " ")}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px]">
+                                {exc.payment_verified && (
+                                  <span className="font-mono px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/40">
+                                    Payment Verified
+                                  </span>
+                                )}
+                                {exc.original_booking_intact && (
+                                  <span className="font-mono px-1.5 py-0.5 rounded bg-blue-950/40 text-blue-300 border border-blue-800/40">
+                                    Booking Intact
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <p className="text-xs text-gray-300 leading-relaxed">
+                              {exc.reason}
+                            </p>
+
+                            <div className="p-2 bg-white/5 border border-white/10 rounded text-[11px] text-gray-300">
+                              <span className="text-gray-400 font-semibold block text-[10px] uppercase">Safe Next Action:</span>
+                              {exc.safe_next_action}
+                            </div>
+
+                            {exc.can_retry_automatically && exc.operation_id && (
+                              <div className="pt-1 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRetryOperation(exc.operation_id!)}
+                                  disabled={recoveryRetryingId === exc.operation_id}
+                                  className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                >
+                                  {recoveryRetryingId === exc.operation_id ? (
+                                    <>
+                                      <Loader2 size={12} className="animate-spin" />
+                                      Retrying Recovery...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <RefreshCw size={12} />
+                                      Execute Safe Recovery Retry
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

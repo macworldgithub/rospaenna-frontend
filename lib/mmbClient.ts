@@ -1740,7 +1740,243 @@ export async function dispatchBookingReminder(
   }
 }
 
+// ============================================================================
+// Ticket M16: Action History and Recovery View
+// ============================================================================
 
+export type TimelineEventCategory =
+  | "booking"
+  | "amendment"
+  | "request"
+  | "payment"
+  | "notification"
+  | "exception"
+  | "other";
 
+export interface TimelineEvent {
+  event_id: string;
+  timestamp: string;
+  category: TimelineEventCategory;
+  summary: string;
+  details?: string | null;
+  actor_label: string;
+  booking_revision: number;
+  is_exception: boolean;
+  status_badge?: string | null;
+}
 
+export interface GuestActionHistoryResponse {
+  booking_reference: string;
+  booking_revision: number;
+  total_events: number;
+  events: TimelineEvent[];
+  read_at: string;
+}
 
+export interface StaffActionHistoryResponse {
+  booking_reference: string;
+  booking_revision: number;
+  total_events: number;
+  open_exceptions_count: number;
+  events: TimelineEvent[];
+  read_at: string;
+}
+
+export type RecoveryExceptionType =
+  | "unconfirmed_reconciliation"
+  | "partial_write"
+  | "notification_failure";
+
+export interface RecoveryExceptionItem {
+  exception_id: string;
+  booking_reference: string;
+  exception_type: RecoveryExceptionType;
+  operation_id?: string | null;
+  request_id?: string | null;
+  created_at: string;
+  stage?: string | null;
+  reason: string;
+  payment_verified: boolean;
+  can_retry_automatically: boolean;
+  original_booking_intact: boolean;
+  safe_next_action: string;
+}
+
+export interface StaffRecoveryExceptionsListResponse {
+  total_exceptions: number;
+  unconfirmed_reconciliations_count: number;
+  notification_failures_count: number;
+  exceptions: RecoveryExceptionItem[];
+  read_at: string;
+}
+
+export interface StaffRecoveryRetryRequest {
+  staff_notes?: string | null;
+}
+
+export interface StaffRecoveryRetryResponse {
+  operation_id: string;
+  booking_reference: string;
+  outcome: "recovered_completed" | "still_unconfirmed" | "conflict";
+  stage: string;
+  readback_verified: boolean;
+  new_booking_revision: number;
+  replayed: boolean;
+  message: string;
+  next_action: string;
+  recovered_at: string;
+}
+
+export async function fetchGuestHistory(
+  bookingReference: string,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: GuestActionHistoryResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {};
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(
+      `/api/mmb/history/${encodeURIComponent(bookingReference.trim().toUpperCase())}`,
+      {
+        method: "GET",
+        headers,
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch booking history.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching booking history.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function fetchStaffHistory(
+  bookingReference: string,
+  staffToken: string
+): Promise<{ success: boolean; data?: StaffActionHistoryResponse; error?: string }> {
+  try {
+    const res = await fetch(
+      `/api/staff/history/${encodeURIComponent(bookingReference.trim().toUpperCase())}`,
+      {
+        method: "GET",
+        headers: {
+          "X-Staff-Token": staffToken.trim(),
+        },
+        cache: "no-store",
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch staff booking history.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching staff history.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function fetchRecoveryExceptions(
+  staffToken: string,
+  filters?: { exception_type?: string; booking_reference?: string }
+): Promise<{ success: boolean; data?: StaffRecoveryExceptionsListResponse; error?: string }> {
+  try {
+    const params = new URLSearchParams();
+    if (filters?.exception_type) params.set("exception_type", filters.exception_type);
+    if (filters?.booking_reference) params.set("booking_reference", filters.booking_reference.trim().toUpperCase());
+
+    const queryStr = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetch(`/api/staff/recovery/exceptions${queryStr}`, {
+      method: "GET",
+      headers: {
+        "X-Staff-Token": staffToken.trim(),
+      },
+      cache: "no-store",
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch recovery exceptions.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching recovery exceptions.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function retryRecoveryOperation(
+  staffToken: string,
+  operationId: string,
+  payload: StaffRecoveryRetryRequest = {}
+): Promise<{ success: boolean; data?: StaffRecoveryRetryResponse; error?: string }> {
+  try {
+    const res = await fetch(
+      `/api/staff/recovery/operations/${encodeURIComponent(operationId.trim())}/retry`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Staff-Token": staffToken.trim(),
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Recovery retry failed.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error executing recovery retry.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}

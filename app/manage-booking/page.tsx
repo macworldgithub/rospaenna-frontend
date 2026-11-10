@@ -39,8 +39,14 @@ import {
   updateOccupantRoster,
   fetchGuestPhone,
   updateGuestPhone,
+  fetchBookingCaddyRoster,
+  updateRoundCaddyRequest,
   type GuestPhoneReadResponse,
   type GuestPhoneUpdateResponse,
+  type BookingCaddyRosterResponse,
+  type RoundCaddySummary,
+  type RoundCaddyUpdateRequest,
+  type CaddyCategory,
   type OccupantRosterResponse,
   type OccupantDetail,
   type BedPreferenceType,
@@ -125,6 +131,18 @@ export default function ManageBookingPage() {
   const [isUpdatingPhone, setIsUpdatingPhone] = useState(false);
   const [phoneMessage, setPhoneMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Ticket M12: Per-Round Caddy Request Updates state
+  const [caddyRoster, setCaddyRoster] = useState<BookingCaddyRosterResponse | null>(null);
+  const [isLoadingCaddies, setIsLoadingCaddies] = useState(false);
+  const [caddyError, setCaddyError] = useState<string | null>(null);
+  const [caddySuccessMessage, setCaddySuccessMessage] = useState<string | null>(null);
+  const [updatingRoundId, setUpdatingRoundId] = useState<string | null>(null);
+  const [caddyDrafts, setCaddyDrafts] = useState<Record<string, {
+    caddies_requested: number;
+    caddy_category: CaddyCategory;
+    notes: string;
+  }>>({});
+
   useEffect(() => {
     if (cooldown > 0) {
       const timer = setTimeout(() => setCooldown((c) => c - 1), 1000);
@@ -180,6 +198,7 @@ export default function ManageBookingPage() {
           }
           await loadOccupantRoster(bookingRef, token);
           await loadGuestPhone(bookingRef, token);
+          await loadCaddyRoster(bookingRef, token);
         }
         setVerified(true);
       } else {
@@ -202,6 +221,7 @@ export default function ManageBookingPage() {
           setAmendDeparture(bookingRes.booking.stay.departure_date || "");
         }
         await loadGuestPhone(bookingRef, sessionToken);
+        await loadCaddyRoster(bookingRef, sessionToken);
       }
     } finally {
       setIsRefreshing(false);
@@ -502,6 +522,75 @@ export default function ManageBookingPage() {
     }
   }
 
+  async function loadCaddyRoster(refToUse?: string, tokenToUse?: string) {
+    const ref = refToUse || bookingData?.booking_reference || bookingRef;
+    const tok = tokenToUse || sessionToken;
+    if (!ref || !tok) return;
+
+    setIsLoadingCaddies(true);
+    setCaddyError(null);
+    try {
+      const res = await fetchBookingCaddyRoster(ref, tok);
+      if (res.success && res.data) {
+        setCaddyRoster(res.data);
+        const drafts: Record<string, { caddies_requested: number; caddy_category: CaddyCategory; notes: string }> = {};
+        for (const rnd of res.data.rounds) {
+          drafts[rnd.round_id] = {
+            caddies_requested: rnd.caddies_requested,
+            caddy_category: (rnd.caddy_category as CaddyCategory) || "caddie",
+            notes: rnd.general_notes || "",
+          };
+        }
+        setCaddyDrafts(drafts);
+      } else {
+        setCaddyError(res.error || "Failed to load caddy request roster.");
+      }
+    } finally {
+      setIsLoadingCaddies(false);
+    }
+  }
+
+  async function handleUpdateRoundCaddy(roundId: string) {
+    if (!sessionToken || !bookingData || !caddyRoster) return;
+    const draft = caddyDrafts[roundId];
+    if (!draft) return;
+
+    setUpdatingRoundId(roundId);
+    setCaddyError(null);
+    setCaddySuccessMessage(null);
+
+    try {
+      const payload: RoundCaddyUpdateRequest = {
+        booking_reference: bookingData.booking_reference,
+        round_id: roundId,
+        caddies_requested: draft.caddies_requested,
+        caddy_category: draft.caddies_requested > 0 ? draft.caddy_category : undefined,
+        general_notes: draft.notes.trim() || undefined,
+        expected_revision: caddyRoster.booking_revision,
+        payment_terms: "payable_on_the_day",
+      };
+
+      const res = await updateRoundCaddyRequest(
+        bookingData.booking_reference,
+        roundId,
+        payload,
+        sessionToken
+      );
+
+      if (res.success && res.data) {
+        setCaddySuccessMessage(res.data.message);
+        await loadCaddyRoster();
+        await handleRefreshBooking();
+      } else {
+        setCaddyError(res.error || "Failed to update caddy request.");
+      }
+    } catch (err: unknown) {
+      setCaddyError(err instanceof Error ? err.message : "Error updating caddy request.");
+    } finally {
+      setUpdatingRoundId(null);
+    }
+  }
+
   async function handleLogout() {
     if (sessionToken) {
       await logoutMmbSession(sessionToken);
@@ -518,6 +607,10 @@ export default function ManageBookingPage() {
     setGuestPhone("");
     setCurrentPhoneSnapshot(null);
     setPhoneMessage(null);
+    setCaddyRoster(null);
+    setCaddyError(null);
+    setCaddySuccessMessage(null);
+    setCaddyDrafts({});
   }
 
   async function checkStatus() {
@@ -2512,16 +2605,236 @@ export default function ManageBookingPage() {
                     </div>
                   ) : null}
 
-                  {/* Caddy Requests Info Notice (Ticket M12) */}
-                  <div className="p-4 bg-[#141414] rounded border border-white/5 space-y-2">
-                    <div className="flex justify-between font-semibold text-white">
-                      <span>Caddy Requests Policy (Ticket M12)</span>
-                      <span className="text-[#DBB155]">€90 per bag payable on day of play</span>
+                  {/* Per-Round Caddy Request Management (Ticket M12) */}
+                  <div className="bg-[#111] border border-white/10 p-5 rounded-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-3 gap-2">
+                      <div>
+                        <span className="text-[#DBB155] uppercase tracking-wider font-semibold text-xs flex items-center gap-1.5">
+                          <Users size={14} className="text-[#DBB155]" />
+                          Per-Round Caddy Request Management (Ticket M12)
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Assign walking caddies or forecaddies for each confirmed golf round. Requests are subject to Caddie Master availability.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/40">
+                          €0.00 Online Charge
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/40 text-amber-300 border border-amber-800/40">
+                          €90 / bag at Golf Pavilion
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-gray-400 text-[11px] leading-relaxed">
-                      Caddy requests are fulfilled by the Rosapenna Caddie Master on the day of play and are payable directly at the Golf Pavilion.
-                      Online caddy requests carry €0.00 charge in package booking.
-                    </p>
+
+                    {caddyError && (
+                      <div className="p-3 bg-red-950/30 border border-red-800/40 rounded text-red-300 flex items-start justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle size={15} className="shrink-0 text-red-400" />
+                          <span>{caddyError}</span>
+                        </div>
+                        {caddyError.toLowerCase().includes("conflict") && (
+                          <button
+                            type="button"
+                            onClick={() => loadCaddyRoster()}
+                            className="text-[#DBB155] underline hover:text-white cursor-pointer font-semibold text-[11px] shrink-0"
+                          >
+                            Refresh Caddies
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {caddySuccessMessage && (
+                      <div className="p-3 bg-emerald-950/30 border border-emerald-800/40 rounded text-emerald-300 flex items-center gap-2 text-xs">
+                        <CheckCircle2 size={15} className="shrink-0 text-emerald-400" />
+                        <span>{caddySuccessMessage}</span>
+                      </div>
+                    )}
+
+                    {isLoadingCaddies ? (
+                      <div className="p-6 text-center text-gray-400 flex items-center justify-center gap-2 text-xs">
+                        <Loader2 size={15} className="animate-spin text-[#DBB155]" />
+                        <span>Loading caddy request roster...</span>
+                      </div>
+                    ) : caddyRoster && caddyRoster.rounds.length > 0 ? (
+                      <div className="space-y-4">
+                        {caddyRoster.rounds.map((round) => {
+                          const draft = caddyDrafts[round.round_id] || {
+                            caddies_requested: round.caddies_requested,
+                            caddy_category: (round.caddy_category as CaddyCategory) || "caddie",
+                            notes: round.general_notes || "",
+                          };
+                          const isUpdating = updatingRoundId === round.round_id;
+                          const hasChanged =
+                            draft.caddies_requested !== round.caddies_requested ||
+                            (draft.caddies_requested > 0 && draft.caddy_category !== round.caddy_category) ||
+                            (draft.notes.trim() !== (round.general_notes || "").trim());
+
+                          return (
+                            <div
+                              key={round.round_id}
+                              className="p-4 bg-[#161616] border border-white/5 rounded space-y-3"
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-white text-xs">
+                                      {round.course_name}
+                                    </span>
+                                    <span className="text-[10px] font-mono text-[#DBB155] bg-white/5 px-2 py-0.5 rounded">
+                                      {round.time}
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] text-gray-400">
+                                    Date: {round.date} &bull; Confirmed Players: <strong className="text-white">{round.players}</strong> ({round.holes} Holes)
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase ${
+                                      round.caddies_requested > 0
+                                        ? "bg-[#DBB155]/20 text-[#DBB155] border border-[#DBB155]/30"
+                                        : "bg-white/5 text-gray-400 border border-white/10"
+                                    }`}
+                                  >
+                                    {round.caddies_requested > 0
+                                      ? `${round.caddies_requested} Caddy Requested`
+                                      : "No Caddy"}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                                {/* Caddies Count Selection */}
+                                <div>
+                                  <label className="block text-[11px] text-gray-400 mb-1">
+                                    Caddies Requested (Max {round.players}):
+                                  </label>
+                                  <select
+                                    value={draft.caddies_requested}
+                                    disabled={isUpdating}
+                                    onChange={(e) => {
+                                      const count = parseInt(e.target.value, 10);
+                                      setCaddyDrafts((prev) => ({
+                                        ...prev,
+                                        [round.round_id]: {
+                                          ...draft,
+                                          caddies_requested: count,
+                                        },
+                                      }));
+                                    }}
+                                    className="w-full bg-[#202020] border border-white/10 rounded px-2.5 py-1.5 text-white text-xs outline-none focus:border-[#DBB155]"
+                                  >
+                                    {Array.from({ length: round.players + 1 }, (_, i) => (
+                                      <option key={i} value={i}>
+                                        {i === 0 ? "0 (No Caddy)" : `${i} Caddy (${i} Bag${i > 1 ? "s" : ""})`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Caddy Tier Selection */}
+                                <div>
+                                  <label className="block text-[11px] text-gray-400 mb-1">
+                                    Caddy Tier:
+                                  </label>
+                                  <select
+                                    value={draft.caddy_category}
+                                    disabled={isUpdating || draft.caddies_requested === 0}
+                                    onChange={(e) => {
+                                      const cat = e.target.value as CaddyCategory;
+                                      setCaddyDrafts((prev) => ({
+                                        ...prev,
+                                        [round.round_id]: {
+                                          ...draft,
+                                          caddy_category: cat,
+                                        },
+                                      }));
+                                    }}
+                                    className="w-full bg-[#202020] border border-white/10 rounded px-2.5 py-1.5 text-white text-xs outline-none focus:border-[#DBB155] disabled:opacity-40"
+                                  >
+                                    <option value="caddie">Walking Caddie (Individual Bag)</option>
+                                    <option value="forecaddie">Forecaddie (Group Assistance)</option>
+                                  </select>
+                                </div>
+
+                                {/* Financial Estimate Readout */}
+                                <div className="bg-[#202020] p-2.5 rounded border border-white/5 space-y-0.5">
+                                  <div className="flex justify-between items-center text-[10px] text-gray-400">
+                                    <span>Online Charge:</span>
+                                    <span className="font-mono text-emerald-400">€0.00</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[11px] font-semibold text-white">
+                                    <span>Estimated Day Fee:</span>
+                                    <span className="font-mono text-[#DBB155]">
+                                      €{(draft.caddies_requested * 90).toFixed(2)}
+                                    </span>
+                                  </div>
+                                  <span className="text-[9px] text-gray-500 block">
+                                    Payable directly at Golf Pavilion
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* General Notes for Caddie Master */}
+                              <div className="space-y-1">
+                                <label className="block text-[11px] text-gray-400">
+                                  Notes for Caddie Master (e.g. left-handed player, bag preferences):
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={250}
+                                  value={draft.notes}
+                                  disabled={isUpdating || draft.caddies_requested === 0}
+                                  placeholder={draft.caddies_requested === 0 ? "Select 1 or more caddies to add notes" : "e.g. Experienced links caddie requested for championship round"}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setCaddyDrafts((prev) => ({
+                                      ...prev,
+                                      [round.round_id]: {
+                                        ...draft,
+                                        notes: val,
+                                      },
+                                    }));
+                                  }}
+                                  className="w-full bg-[#202020] border border-white/10 rounded px-2.5 py-1.5 text-white text-xs outline-none focus:border-[#DBB155] disabled:opacity-40"
+                                />
+                              </div>
+
+                              {/* Save / Remove Action Button */}
+                              <div className="flex justify-end pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateRoundCaddy(round.round_id)}
+                                  disabled={isUpdating || !hasChanged}
+                                  className="px-4 py-1.5 bg-[#DBB155] hover:bg-[#c9a04a] disabled:bg-gray-700 disabled:text-gray-400 text-black font-semibold text-xs rounded transition-all cursor-pointer flex items-center gap-1.5"
+                                >
+                                  {isUpdating ? (
+                                    <>
+                                      <Loader2 size={12} className="animate-spin" /> Saving...
+                                    </>
+                                  ) : draft.caddies_requested === 0 && round.caddies_requested > 0 ? (
+                                    "Remove Caddy Request"
+                                  ) : (
+                                    "Save Caddy Request"
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-gray-400 italic py-2 text-center text-xs">
+                        No championship golf rounds attached to this reservation.
+                      </p>
+                    )}
+
+                    <div className="pt-2 border-t border-white/5 text-[11px] text-gray-400 flex flex-col sm:flex-row justify-between gap-1">
+                      <span>Caddies are fulfilled on the day of play and subject to availability.</span>
+                      <span className="text-gray-300">Golf Pavilion Desk: +353 (0)74 91 55000</span>
+                    </div>
                   </div>
                 </div>
               )

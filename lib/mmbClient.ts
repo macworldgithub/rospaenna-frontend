@@ -1004,4 +1004,163 @@ export async function updateGuestPhone(
   }
 }
 
+// ============================================================================
+// Ticket M12: Per-Round Caddy Request Updates
+// ============================================================================
+
+export type CaddyCategory = "caddie" | "forecaddie";
+
+export interface CaddyBagPreference {
+  bag_index: number;
+  caddy_category?: CaddyCategory;
+  player_name?: string | null;
+  notes?: string | null;
+}
+
+export interface RoundCaddySummary {
+  round_id: string;
+  course_id: number;
+  course_name: string;
+  date: string;
+  time: string;
+  holes: string;
+  players: number;
+  caddies_requested: number;
+  caddy_category?: CaddyCategory | null;
+  caddy_request_status: string;
+  bag_preferences: CaddyBagPreference[];
+  general_notes?: string | null;
+  online_charge: string;
+  estimated_day_fee: string;
+  notice: string;
+}
+
+export interface BookingCaddyRosterResponse {
+  booking_reference: string;
+  booking_revision: number;
+  rounds: RoundCaddySummary[];
+  general_notice: string;
+  read_at: string;
+}
+
+export interface RoundCaddyUpdateRequest {
+  booking_reference: string;
+  round_id: string;
+  caddies_requested: number;
+  caddy_category?: CaddyCategory | null;
+  bag_preferences?: CaddyBagPreference[];
+  general_notes?: string | null;
+  expected_revision: number;
+  payment_terms?: "payable_on_the_day";
+}
+
+export interface RoundCaddyUpdateResponse {
+  operation_id: string;
+  booking_reference: string;
+  round_id: string;
+  caddies_requested: number;
+  caddy_category?: CaddyCategory | null;
+  caddy_request_status: string;
+  bag_preferences: CaddyBagPreference[];
+  general_notes?: string | null;
+  booking_revision: number;
+  online_charge: string;
+  estimated_day_fee: string;
+  verified_via_readback: boolean;
+  replayed: boolean;
+  message: string;
+  notice: string;
+  updated_at: string;
+}
+
+export async function fetchBookingCaddyRoster(
+  bookingReference: string,
+  sessionToken?: string
+): Promise<{ success: boolean; data?: BookingCaddyRosterResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {};
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+
+    const res = await fetch(`/api/mmb/caddy/${encodeURIComponent(bookingReference.trim().toUpperCase())}`, {
+      method: "GET",
+      headers,
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to fetch caddy request roster.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error fetching caddy request roster.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function updateRoundCaddyRequest(
+  bookingReference: string,
+  roundId: string,
+  request: RoundCaddyUpdateRequest,
+  sessionToken?: string,
+  idempotencyKey?: string
+): Promise<{ success: boolean; data?: RoundCaddyUpdateResponse; error?: string }> {
+  try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (sessionToken) {
+      headers["X-MMB-Session"] = sessionToken.trim();
+    }
+    const key =
+      idempotencyKey ||
+      (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `idemp_cad_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+    headers["Idempotency-Key"] = key;
+
+    const res = await fetch(
+      `/api/mmb/caddy/${encodeURIComponent(bookingReference.trim().toUpperCase())}/rounds/${encodeURIComponent(
+        roundId.trim()
+      )}`,
+      {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(request),
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Unable to update caddy request.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error updating caddy request.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+
 

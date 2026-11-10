@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3030",
     "lint": "eslint",
-    "test": "node --test scripts/brs-checkout.test.cjs scripts/truthful-booking-status.test.cjs scripts/guest-booking-inputs.test.cjs scripts/stay-golf-search.test.cjs scripts/packages-n04-n05.test.cjs scripts/mmb-gate.test.cjs scripts/mmb-linkage.test.cjs scripts/mmb-auth.test.cjs scripts/mmb-dashboard.test.cjs scripts/mmb-amendments.test.cjs scripts/mmb-amendments-m06.test.cjs scripts/mmb-amendments-m07.test.cjs scripts/mmb-amendments-m08.test.cjs scripts/mmb-occupants-m10.test.cjs scripts/mmb-amendments-m09.test.cjs scripts/mmb-phone-m11.test.cjs",
+    "test": "node --test scripts/brs-checkout.test.cjs scripts/truthful-booking-status.test.cjs scripts/guest-booking-inputs.test.cjs scripts/stay-golf-search.test.cjs scripts/packages-n04-n05.test.cjs scripts/mmb-gate.test.cjs scripts/mmb-linkage.test.cjs scripts/mmb-auth.test.cjs scripts/mmb-dashboard.test.cjs scripts/mmb-amendments.test.cjs scripts/mmb-amendments-m06.test.cjs scripts/mmb-amendments-m07.test.cjs scripts/mmb-amendments-m08.test.cjs scripts/mmb-occupants-m10.test.cjs scripts/mmb-amendments-m09.test.cjs scripts/mmb-phone-m11.test.cjs scripts/mmb-caddy-m12.test.cjs",
     "test:checkout": "node --test scripts/brs-checkout.test.cjs",
     "test:status": "node --test scripts/truthful-booking-status.test.cjs",
     "test:inputs": "node --test scripts/guest-booking-inputs.test.cjs",
@@ -17,7 +17,8 @@
     "test:auth": "node --test scripts/mmb-auth.test.cjs",
     "test:m07": "node --test scripts/mmb-amendments-m07.test.cjs",
     "test:m09": "node --test scripts/mmb-amendments-m09.test.cjs",
-    "test:m11": "node --test scripts/mmb-phone-m11.test.cjs"
+    "test:m11": "node --test scripts/mmb-phone-m11.test.cjs",
+    "test:m12": "node --test scripts/mmb-caddy-m12.test.cjs"
   },
   "dependencies": {
     "lucide-react": "^1.23.0",

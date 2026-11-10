@@ -3224,14 +3224,22 @@ export default function ManageBookingPage() {
                                 </span>
                                 <span
                                   className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${
-                                    item.status === "approved"
+                                    item.status === "completed"
                                       ? "bg-emerald-950/40 text-emerald-300 border border-emerald-800/40"
-                                      : item.status === "declined"
+                                      : item.status === "approved_awaiting_implementation"
+                                      ? "bg-sky-950/40 text-sky-300 border border-sky-800/40"
+                                      : item.status === "needs_information"
+                                      ? "bg-amber-950/40 text-amber-300 border border-amber-800/40"
+                                      : item.status === "rejected" || item.status === "declined"
                                       ? "bg-red-950/40 text-red-300 border border-red-800/40"
-                                      : "bg-amber-950/40 text-amber-300 border border-amber-800/40"
+                                      : "bg-gray-800 text-gray-300 border border-gray-700"
                                   }`}
                                 >
-                                  {item.status.replace("_", " ")}
+                                  {item.status === "approved_awaiting_implementation"
+                                    ? "Approved (Queued for Implementation)"
+                                    : item.status === "needs_information"
+                                    ? "Information Needed"
+                                    : item.status.replace("_", " ")}
                                 </span>
                               </div>
                             </div>
@@ -3239,6 +3247,13 @@ export default function ManageBookingPage() {
                             <p className="text-gray-300 text-xs whitespace-pre-wrap leading-relaxed">
                               {item.request_text}
                             </p>
+
+                            {item.notes && (
+                              <div className="p-2.5 bg-white/5 border border-white/10 rounded text-[11px] space-y-0.5">
+                                <span className="text-[#DBB155] font-semibold block">Staff Resolution Note:</span>
+                                <p className="text-gray-300">{item.notes}</p>
+                              </div>
+                            )}
 
                             {(item.desired_dates || item.desired_room_category || item.desired_golf_notes) && (
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-white/5 text-[10px] text-gray-400">

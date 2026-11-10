@@ -1180,6 +1180,10 @@ export type RequestType = "special_request" | "cancellation_request";
 export type RequestReviewStatus =
   | "pending_review"
   | "under_review"
+  | "needs_information"
+  | "rejected"
+  | "approved_awaiting_implementation"
+  | "completed"
   | "approved"
   | "declined"
   | "cancelled";
@@ -1206,6 +1210,7 @@ export interface GuestSpecialRequestItem {
   desired_golf_notes?: string | null;
   status: RequestReviewStatus;
   submitted_at: string;
+  notes?: string | null;
   email_delivery_id?: string | null;
   email_delivery_status?: string | null;
 }
@@ -1316,6 +1321,216 @@ export async function submitGuestSpecialRequest(
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Network error submitting guest request.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Ticket M14: Staff Request Outcomes Types & Client Methods
+// ----------------------------------------------------------------------------
+
+export type StaffRequestOutcomeStatus =
+  | "needs_information"
+  | "rejected"
+  | "approved_awaiting_implementation"
+  | "completed";
+
+export type StaffRequestExecutionType =
+  | "informational_only"
+  | "f14_operation"
+  | "vendor_readback_verified";
+
+export interface StaffRequestHistoryEntry {
+  history_id: string;
+  actor: string;
+  timestamp: string;
+  prior_status: string;
+  new_status: string;
+  reason: string;
+  internal_notes?: string | null;
+  guest_message?: string | null;
+  execution_type?: string | null;
+  f14_operation_id?: string | null;
+  vendor_readback_ref?: string | null;
+  cancellation_authorization_ref?: string | null;
+  f12_delivery_id?: string | null;
+  f12_delivery_status?: string | null;
+}
+
+export interface StaffRequestItem {
+  request_id: string;
+  booking_reference: string;
+  request_type: string;
+  category: string;
+  request_text: string;
+  desired_dates?: string | null;
+  desired_room_category?: string | null;
+  desired_golf_notes?: string | null;
+  status: RequestReviewStatus;
+  submitted_at: string;
+  last_updated_at?: string | null;
+  lead_guest_name?: string | null;
+  lead_guest_email?: string | null;
+  notes?: string | null;
+  history: StaffRequestHistoryEntry[];
+  f12_delivery_id?: string | null;
+  f12_delivery_status?: string | null;
+  booking_revision: number;
+}
+
+export interface StaffRequestTransitionCreate {
+  target_status: StaffRequestOutcomeStatus;
+  reason: string;
+  internal_notes?: string | null;
+  guest_message?: string | null;
+  execution_type?: StaffRequestExecutionType | null;
+  f14_operation_id?: string | null;
+  vendor_readback_ref?: string | null;
+  cancellation_authorization_ref?: string | null;
+  expected_revision?: number | null;
+}
+
+export interface StaffRequestTransitionResponse {
+  request_id: string;
+  booking_reference: string;
+  prior_status: string;
+  new_status: string;
+  transition_recorded_at: string;
+  booking_revision: number;
+  f12_delivery_status: string;
+  f12_delivery_id?: string | null;
+  replayed: boolean;
+  message: string;
+  notice: string;
+}
+
+export interface StaffRequestListResponse {
+  total: number;
+  requests: StaffRequestItem[];
+  read_at: string;
+}
+
+export async function fetchStaffRequests(
+  staffToken: string,
+  filters?: { status?: string; request_type?: string; booking_reference?: string }
+): Promise<{ success: boolean; data?: StaffRequestListResponse; error?: string }> {
+  try {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.request_type) params.set("request_type", filters.request_type);
+    if (filters?.booking_reference) params.set("booking_reference", filters.booking_reference.trim().toUpperCase());
+
+    const queryStr = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetch(`/api/staff/requests${queryStr}`, {
+      method: "GET",
+      headers: {
+        "X-Staff-Token": staffToken.trim(),
+      },
+      cache: "no-store",
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Failed to fetch staff requests.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error listing staff requests.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function transitionStaffRequest(
+  staffToken: string,
+  bookingReference: string,
+  requestId: string,
+  payload: StaffRequestTransitionCreate,
+  idempotencyKey?: string
+): Promise<{ success: boolean; data?: StaffRequestTransitionResponse; error?: string }> {
+  try {
+    const key =
+      idempotencyKey ||
+      (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `idemp_staff_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+
+    const res = await fetch(
+      `/api/staff/requests/${encodeURIComponent(bookingReference.trim().toUpperCase())}/${encodeURIComponent(requestId.trim())}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Staff-Token": staffToken.trim(),
+          "Idempotency-Key": key,
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Failed to transition staff request.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error transitioning staff request.";
+    return {
+      success: false,
+      error: message,
+    };
+  }
+}
+
+export async function retryStaffRequestNotification(
+  staffToken: string,
+  bookingReference: string,
+  requestId: string
+): Promise<{ success: boolean; data?: StaffRequestTransitionResponse; error?: string }> {
+  try {
+    const res = await fetch(
+      `/api/staff/requests/${encodeURIComponent(bookingReference.trim().toUpperCase())}/${encodeURIComponent(requestId.trim())}/retry`,
+      {
+        method: "POST",
+        headers: {
+          "X-Staff-Token": staffToken.trim(),
+        },
+      }
+    );
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        success: false,
+        error: json.error || json.detail || "Failed to retry notification.",
+      };
+    }
+
+    return {
+      success: true,
+      data: json.data || json,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Network error retrying notification.";
     return {
       success: false,
       error: message,

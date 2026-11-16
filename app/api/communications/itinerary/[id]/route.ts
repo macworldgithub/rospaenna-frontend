@@ -6,55 +6,15 @@ export async function GET(
 ) {
   const { id } = await context.params;
   if (!id || id.trim().length === 0) {
-    return NextResponse.json({ error: "Booking reference or intent ID is required." }, { status: 400 });
-  }
-
-  const baseUrl = process.env.BOOKING_BACKEND_URL || "http://127.0.0.1:4040";
-  const apiKey = process.env.BOOKING_API_KEY;
-
-  if (!apiKey) {
     return NextResponse.json(
-      { error: "The booking service is not configured yet." },
-      { status: 503 }
+      { error: "Booking reference or intent ID is required." },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
     );
   }
 
-  try {
-    const backendRes = await fetch(
-      `${baseUrl.replace(/\/$/, "")}/communications/itinerary/${encodeURIComponent(id)}/pdf`,
-      {
-        method: "GET",
-        headers: {
-          "X-API-Key": apiKey,
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(15000),
-      }
-    );
-
-    if (!backendRes.ok) {
-      if (backendRes.status === 404) {
-        return NextResponse.json({ error: "Booking record was not found." }, { status: 404 });
-      }
-      return NextResponse.json(
-        { error: "Failed to generate itinerary PDF." },
-        { status: backendRes.status }
-      );
-    }
-
-    const pdfBuffer = await backendRes.arrayBuffer();
-    return new NextResponse(pdfBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="Rosapenna-Itinerary-${encodeURIComponent(id)}.pdf"`,
-        "Cache-Control": "no-store",
-      },
-    });
-  } catch {
-    return NextResponse.json(
-      { error: "The booking service is temporarily unavailable." },
-      { status: 503 }
-    );
-  }
+  // Deny unscoped legacy itinerary PDF download under Ticket N07 security policy
+  return NextResponse.json(
+    { error: "Unscoped itinerary PDF download via this route is disabled. Authorized booking or guest session is required." },
+    { status: 403, headers: { "Cache-Control": "no-store" } }
+  );
 }

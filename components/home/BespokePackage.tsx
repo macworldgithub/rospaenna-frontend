@@ -132,6 +132,13 @@ export default function BespokePackage() {
   const [paymentLinkError, setPaymentLinkError] = useState<string | null>(null);
   const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
   const [simulationSuccess, setSimulationSuccess] = useState<string | null>(null);
+  const [bookingCommitDetails, setBookingCommitDetails] = useState<{
+    status: string;
+    stage: string;
+    operaResId?: string;
+    operaConfNum?: string;
+    brsRoundIds?: string[];
+  } | null>(null);
 
   // Restore inputs from sessionStorage on mount
   useEffect(() => {
@@ -781,7 +788,7 @@ export default function BespokePackage() {
     }
   };
 
-  // Sandbox simulation of verified guest payment (Ticket N05)
+  // Sandbox simulation of verified guest payment and booking creation (Ticket N06)
   const handleSimulateSandboxPayment = async () => {
     if (!paymentLinkRecord) return;
     setIsSimulatingPayment(true);
@@ -789,14 +796,11 @@ export default function BespokePackage() {
     setPaymentLinkError(null);
 
     try {
-      const res = await fetch("/api/packages/payment-callback", {
+      const res = await fetch(`/api/dev/payments/${encodeURIComponent(paymentLinkRecord.payment_id)}/simulate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          payment_id: paymentLinkRecord.payment_id,
-          status: "paid",
-          amount: paymentLinkRecord.amount,
-          currency: paymentLinkRecord.currency,
+          scenario: "success",
         }),
       });
 
@@ -805,8 +809,22 @@ export default function BespokePackage() {
         throw new Error(err.error || "Sandbox payment simulation failed.");
       }
 
+      const simData = await res.json();
       await handleRefreshPaymentStatus(paymentLinkRecord.payment_id);
-      setSimulationSuccess("Payment verified! Deposit has been credited to your reservation.");
+
+      if (simData.commit_result) {
+        const cr = simData.commit_result;
+        setBookingCommitDetails({
+          status: cr.status || "unconfirmed_reconciliation",
+          stage: cr.stage || "unconfirmed_reconciliation",
+          operaResId: cr.readback_evidence?.opera_reservation_id,
+          operaConfNum: cr.readback_evidence?.opera_confirmation_number,
+          brsRoundIds: cr.readback_evidence?.brs_round_ids,
+        });
+        setSimulationSuccess("Test payment received. The booking needs staff review.");
+      } else {
+        setSimulationSuccess("Test payment received. We are creating your test booking.");
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Payment simulation failed.";
       setPaymentLinkError(message);
@@ -877,19 +895,26 @@ export default function BespokePackage() {
             {isPaid ? <CheckCircle2 size={32} /> : isExpired ? <XCircle size={32} /> : <CreditCard size={30} />}
           </div>
 
+          {(paymentLinkRecord.evidence_source === "simulation" || paymentLinkRecord.is_test) && (
+            <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/40 rounded text-[11px] font-mono text-amber-300">
+              <ShieldCheck size={14} className="text-amber-400" />
+              <span>TEST SIMULATION - NO REAL PAYMENT OR BOOKING</span>
+            </div>
+          )}
+
           <p
             className={`uppercase tracking-[0.25em] text-[10px] font-semibold mb-2 ${
               isPaid ? "text-emerald-400" : isExpired ? "text-red-400" : "text-[#DBB155]"
             }`}
           >
-            {isPaid ? "Booking Secured & Deposit Verified" : isExpired ? "Payment Link Expired" : "Deposit Payment Link Created"}
+            {isPaid ? "Payment Received" : isExpired ? "Payment Link Expired" : "Deposit Payment Link Created"}
           </p>
           <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white mb-2">
-            {isPaid ? "Reservation Confirmed" : "Stay & Play Deposit Payment"}
+            {isPaid ? "Booking Needs Review" : "Stay & Play Deposit Payment"}
           </h2>
           <p className="text-xs text-gray-400 mb-6">
             {isPaid
-              ? "Your 25% non-refundable deposit has been verified. Welcome to Rosapenna!"
+              ? "Payment was received. Your booking is not yet confirmed and needs staff review."
               : "Review your payment link details below to complete your 25% non-refundable deposit."}
           </p>
 
@@ -899,6 +924,18 @@ export default function BespokePackage() {
               <span className="text-gray-400">Booking Reference:</span>
               <span className="font-mono text-[#DBB155] font-bold text-base">{paymentLinkRecord.booking_reference}</span>
             </div>
+            {bookingCommitDetails?.operaConfNum && (
+              <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+                <span className="text-gray-400">Opera Confirmation #:</span>
+                <span className="font-mono text-emerald-400 font-bold text-sm">{bookingCommitDetails.operaConfNum}</span>
+              </div>
+            )}
+            {bookingCommitDetails?.brsRoundIds && bookingCommitDetails.brsRoundIds.length > 0 && (
+              <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
+                <span className="text-gray-400">BRS Golf Rounds:</span>
+                <span className="font-mono text-emerald-400 text-xs">{bookingCommitDetails.brsRoundIds.join(", ")}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
               <span className="text-gray-400">Payment ID:</span>
               <span className="font-mono text-gray-300 text-xs">{paymentLinkRecord.payment_id}</span>
@@ -969,10 +1006,10 @@ export default function BespokePackage() {
           {isPaid && (
             <div className="border border-emerald-800/40 bg-emerald-950/20 p-4 rounded-sm text-left text-xs leading-relaxed text-emerald-200 mb-6 space-y-2">
               <div className="flex items-center gap-2 font-semibold text-emerald-300">
-                <CheckCircle2 size={16} /> Booking Inventory Secured
+                <AlertTriangle size={16} /> Booking Needs Review
               </div>
               <p>
-                Deposit payment has been verified by the payment gateway. Your hotel rooms and championship golf rounds are now secured.
+                Payment was received. Staff must check the hotel and golf booking before it can be confirmed.
               </p>
               <p className="text-[11px] text-emerald-300/80">
                 The remaining 75% balance of <strong>€{liveQuote?.balance_amount || pricing.balance}</strong> will be requested 6 weeks prior to your arrival date ({liveQuote?.balance_due_date || balanceDueDate}).

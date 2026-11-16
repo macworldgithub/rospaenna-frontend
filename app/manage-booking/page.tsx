@@ -1633,7 +1633,7 @@ export default function ManageBookingPage() {
                             </span>
                           </div>
                           <span className="text-[11px] text-gray-400 block mt-0.5">
-                            Pre-arrival emails are scheduled against Rosapenna's strict 42-day balance policy and verified arrival date.
+                            Pre-arrival emails are scheduled against Rosapenna&apos;s strict 42-day balance policy and verified arrival date.
                           </span>
                         </div>
                         <div className="flex items-center gap-2">

@@ -1694,7 +1694,7 @@ export async function dispatchBookingReminder(
   reminderId: string,
   sessionToken?: string,
   idempotencyKey?: string
-): Promise<{ success: boolean; data?: any; error?: string }> {
+): Promise<{ success: boolean; data?: unknown; error?: string }> {
   try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

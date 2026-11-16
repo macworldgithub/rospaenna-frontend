@@ -104,12 +104,15 @@ export interface PackagePaymentLinkResponse {
   rules_version: string;
   amount: string;
   currency: string;
-  status: "draft" | "unpaid" | "pending" | "verified_paid" | "failed" | "expired";
+  status: "draft" | "unpaid" | "pending" | "verified_paid" | "failed" | "expired" | "cancelled";
   payment_url: string;
   expires_at: string;
   reminder_at: string;
   reserves_inventory: boolean;
   created_at: string;
+  evidence_source?: string;
+  is_test?: boolean;
+  simulation_run_id?: string | null;
 }
 
 export interface PaymentCallbackRequest {

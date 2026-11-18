@@ -209,6 +209,25 @@ test('checkout creates an idempotent draft, records quote evidence, and stores t
   assert.equal(fixture.actions[0].quote.price, '200.00');
 });
 
+test('three-player checkout requires a full name for every player and forwards all three', async () => {
+  const fixture = loadCheckoutRoute({ preparation: async (payload) => {
+    assert.deepEqual(Object.values(payload.players).map(player => player.last_name), ['Guest', 'Second', 'Third']);
+    return { data: { fixture: true }, statusCode: 200 };
+  } });
+  const payload = await fixture.req.json();
+  payload.players['2'] = { first_name: 'Test', last_name: 'Second', club: 'Test Club', handicap: '21' };
+  payload.players['3'] = { first_name: 'Test', last_name: ' ', club: 'Test Club', handicap: '15' };
+
+  const incomplete = await fixture.route.POST(fixture.req);
+  assert.equal(incomplete.status, 400);
+  assert.equal(fixture.backendCalls.length, 0);
+
+  payload.players['3'].last_name = 'Third';
+  const complete = await fixture.route.POST(fixture.req);
+  assert.equal(complete.body.bookingIntentStage, 'checkout_preparation_response_received');
+  assert.equal(fixture.backendCalls[0].body.selection.players, 3);
+});
+
 test('a BRS 429 is recorded as a failed preparation response without claiming payment or reservation', async () => {
   const fixture = loadCheckoutRoute({ preparation: async () => {
     throw new bridge.BookingBackendError('Rate limited', 429, 120, 'upstream_response');

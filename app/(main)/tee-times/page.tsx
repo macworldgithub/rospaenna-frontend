@@ -380,6 +380,7 @@ import {
   useCallback,
 } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Calendar, Sun, X } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { COURSES, TeeTime, TeesheetData, PendingBooking, TeesheetCacheInfo } from "@/types/teesheet";
@@ -414,7 +415,7 @@ export default function Home() {
   useEffect(() => {
     // The date is formatted only after hydration to avoid server/client timezone differences.
     const requestedCourse = new URLSearchParams(window.location.search).get("course");
-    if (requestedCourse && COURSES[requestedCourse]) {
+    if (requestedCourse && Object.hasOwn(COURSES, requestedCourse)) {
       // Initialize from the browser URL after hydration
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedCourse(requestedCourse);
@@ -607,6 +608,9 @@ export default function Home() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-8">
+      <Link href="/book-golf" className="mb-5 inline-block text-sm text-[#DBB155] underline">
+        Change course
+      </Link>
       <div className="flex flex-col lg:flex-row gap-6">
 
         {/* ── Left Column – Filters ── */}
@@ -773,7 +777,6 @@ export default function Home() {
                 <div className="flex items-center gap-2 font-medium text-white">
                   <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
                   <span>Live Availability</span>
-                  <span className="text-xs text-gray-400 font-normal">(Direct BRS Golf Feed)</span>
                 </div>
                 <div className="text-xs text-gray-400 mt-1">
                   Updated {new Date(cacheInfo.fetched_at).toLocaleTimeString("en-IE", { timeZone: "Europe/Dublin" })} (Ireland time)
@@ -781,7 +784,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="text-gray-400">
-                Checking live tee times with BRS Golf...
+                Loading tee times...
               </div>
             )}
           </div>

@@ -6,9 +6,10 @@ import { Phone, Mail, Calendar, Compass, X } from "lucide-react";
 interface BookingChoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
+  showManageBooking?: boolean;
 }
 
-export default function BookingChoiceModal({ isOpen, onClose }: BookingChoiceModalProps) {
+export default function BookingChoiceModal({ isOpen, onClose, showManageBooking }: BookingChoiceModalProps) {
   if (!isOpen) return null;
 
   return (
@@ -18,7 +19,7 @@ export default function BookingChoiceModal({ isOpen, onClose }: BookingChoiceMod
       aria-labelledby="booking-choice-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-2xl bg-[#0c0c0c] border border-[#DBB155]/40 p-6 sm:p-8 rounded-sm shadow-2xl text-white">
+      <div className="relative max-h-full w-full max-w-2xl overflow-y-auto bg-[#0c0c0c] border border-[#DBB155]/40 p-6 sm:p-8 rounded-sm shadow-2xl text-white">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -66,10 +67,8 @@ export default function BookingChoiceModal({ isOpen, onClose }: BookingChoiceMod
           </Link>
 
           {/* Choice 2: Golf Only */}
-          <a
-            href="https://visitors.brsgolf.com/rosapenna#/course/1"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href="/book-golf"
             onClick={onClose}
             className="flex flex-col justify-between p-5 bg-[#141414] border border-white/10 hover:border-[#DBB155] rounded-sm transition-all duration-200 group text-left"
           >
@@ -78,16 +77,16 @@ export default function BookingChoiceModal({ isOpen, onClose }: BookingChoiceMod
                 <Compass size={18} />
               </div>
               <h3 className="text-base font-serif font-semibold text-white group-hover:text-[#DBB155] transition-colors">
-                Golf Only
+                Book Golf
               </h3>
               <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                Day visitor tee times on Old Tom Morris, Sandy Hills, or St Patrick&apos;s Links via BRS Golf.
+                Choose Old Tom Morris, Sandy Hills, or St Patrick&apos;s Links to see visitor tee times.
               </p>
             </div>
             <div className="mt-4 pt-3 border-t border-white/5 text-[11px] font-bold text-[#DBB155] uppercase tracking-wider flex items-center gap-1">
-              Visit BRS Golf &rarr;
+              Choose a course &rarr;
             </div>
-          </a>
+          </Link>
 
           {/* Choice 3: Direct Reservations */}
           <div className="flex flex-col justify-between p-5 bg-[#141414] border border-white/10 rounded-sm text-left">
@@ -118,6 +117,16 @@ export default function BookingChoiceModal({ isOpen, onClose }: BookingChoiceMod
             </div>
           </div>
         </div>
+
+        {showManageBooking && (
+          <Link
+            href="/manage-booking"
+            onClick={onClose}
+            className="mb-4 block rounded-sm border border-[#DBB155]/30 px-4 py-3 text-center text-sm font-semibold text-[#DBB155] hover:border-[#DBB155]"
+          >
+            Manage My Booking
+          </Link>
+        )}
 
         {/* Footer Note */}
         <div className="text-center pt-2 border-t border-white/10">

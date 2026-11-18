@@ -11,12 +11,14 @@ import BespokePackage from "@/components/home/BespokePackage";
 import CompleteExperience from "@/components/home/CompleteExperience";
 import AmenitiesSection from "@/components/home/AmenitiesSection";
 import ChatWidget from "@/components/ChatWidget";
+import ManageBookingSection from "@/components/home/ManageBookingSection";
 
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
-      <Navbar />
+      <Navbar overlay />
       <HeroSection />
+      <ManageBookingSection />
       <GolfSection />
       <CourseShowcase />
       <ThreeLinksTicket />

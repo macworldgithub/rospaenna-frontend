@@ -95,8 +95,8 @@ export default function ManageBookingPage() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "amend" | "rooming" | "requests" | "history">("dashboard");
 
   // Guest authentication and session state
-  const [bookingRef, setBookingRef] = useState("RSP-20270514-TEST01");
-  const [surname, setSurname] = useState("Golfer");
+  const [bookingRef, setBookingRef] = useState("");
+  const [surname, setSurname] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpRequested, setOtpRequested] = useState(false);
   const [otpMessage, setOtpMessage] = useState<string | null>(null);
@@ -874,17 +874,21 @@ export default function ManageBookingPage() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    const reference = new URLSearchParams(window.location.search).get("ref")?.trim();
+    if (reference && /^[A-Za-z0-9-]{5,40}$/.test(reference)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBookingRef(reference.toUpperCase());
+    }
     checkStatus();
   }, []);
 
-  const isEnabled = Boolean(status?.enabled);
+  const isEnabled = status?.enabled === true;
 
   return (
     <main className="min-h-screen bg-[#050505] text-white flex flex-col justify-between selection:bg-[#DBB155]/20 selection:text-[#DBB155]">
-      <Navbar />
+      <Navbar showManageBooking={false} />
 
-      <div className="pt-28 pb-16 px-4 sm:px-6 max-w-5xl mx-auto w-full flex-1 flex flex-col items-center">
+      <div className="pt-12 pb-16 px-4 sm:px-6 max-w-5xl mx-auto w-full flex-1 flex flex-col items-center">
         {loading ? (
           <div className="my-auto text-xs text-gray-400 font-mono flex items-center gap-2 animate-pulse">
             Checking portal release state...
@@ -1040,8 +1044,9 @@ export default function ManageBookingPage() {
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                     <div>
-                      <label className="block text-gray-400 mb-1">Booking Reference</label>
+                      <label htmlFor="manage-booking-reference" className="block text-gray-400 mb-1">Booking Reference</label>
                       <input
+                        id="manage-booking-reference"
                         type="text"
                         value={bookingRef}
                         onChange={(e) => setBookingRef(e.target.value)}
@@ -1050,8 +1055,9 @@ export default function ManageBookingPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-gray-400 mb-1">Lead Guest Surname</label>
+                      <label htmlFor="manage-booking-surname" className="block text-gray-400 mb-1">Lead Guest Surname</label>
                       <input
+                        id="manage-booking-surname"
                         type="text"
                         value={surname}
                         onChange={(e) => setSurname(e.target.value)}
@@ -2777,7 +2783,7 @@ export default function ManageBookingPage() {
                             </span>
                           </div>
                           <p className="text-gray-400 text-[11px] mt-0.5">
-                            Total Booked Rooms: {occupantRoster.room_quantity} &bull; Total Guests: {occupantRoster.occupants.length}
+                            Total Booked Rooms: {occupantRoster.room_quantity} &bull; Guests in rooms: {occupantRoster.occupants.length}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -2988,6 +2994,48 @@ export default function ManageBookingPage() {
                           );
                         })}
                       </div>
+
+                      {Boolean(occupantRoster.unassigned_guests?.length) && (
+                        <fieldset className="space-y-3 rounded border border-white/10 bg-[#111] p-4">
+                          <legend className="px-1 text-sm font-semibold text-[#DBB155]">Guests without a room</legend>
+                          <p className="text-xs text-gray-400">Choose a room for each guest, then save the rooming list.</p>
+                          {occupantRoster.unassigned_guests?.map((guest, index) => (
+                            <label key={index} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                              <span>{guest.first_name} {guest.last_name}</span>
+                              <select
+                                value=""
+                                aria-label={`Choose a room for ${guest.first_name} ${guest.last_name}`}
+                                onChange={(event) => {
+                                  const roomGroupId = event.target.value;
+                                  if (!roomGroupId) return;
+                                  const occupantId = crypto.randomUUID();
+                                  setOccupantRoster((prev) => {
+                                    if (!prev) return prev;
+                                    return {
+                                      ...prev,
+                                      unassigned_guests: prev.unassigned_guests?.filter((_, guestIndex) => guestIndex !== index),
+                                      occupants: [...prev.occupants, {
+                                        ...guest,
+                                        occupant_id: occupantId,
+                                        is_primary: false,
+                                        room_group_id: roomGroupId,
+                                        effective_from: prev.arrival_date,
+                                        effective_to: prev.departure_date,
+                                      }],
+                                    };
+                                  });
+                                }}
+                                className="rounded border border-white/10 bg-[#1e1e1e] p-2 text-white"
+                              >
+                                <option value="">Choose room</option>
+                                {occupantRoster.room_groups.map((room, roomIndex) => (
+                                  <option key={room.room_group_id} value={room.room_group_id}>Room {roomIndex + 1}</option>
+                                ))}
+                              </select>
+                            </label>
+                          ))}
+                        </fieldset>
+                      )}
 
                       {/* Add Extra Occupant Control */}
                       <div className="p-4 bg-[#111] border border-white/5 rounded flex items-center justify-between text-xs">

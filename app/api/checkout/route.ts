@@ -79,10 +79,14 @@ export async function POST(req: NextRequest) {
     const validGuests = guestDetails.every((guest) => {
       if (!guest || typeof guest !== "object" || Array.isArray(guest)) return false;
       const fields = guest as Record<string, unknown>;
-      return hasText(fields.first_name, 100) && hasText(fields.club, 160) && hasText(fields.handicap, 16);
+      return hasText(fields.first_name, 100) && hasText(fields.last_name, 100) &&
+        hasText(fields.club, 160) && hasText(fields.handicap, 16);
     });
     const lead = payload.players["1"];
-    if (!validGuests || !hasText(lead?.last_name, 100) || !hasText(lead?.country, 100) ||
+    if (!validGuests) {
+      return NextResponse.json({ error: "Enter a first name, last name, club, and handicap for every player." }, { status: 400 });
+    }
+    if (!hasText(lead?.country, 100) ||
         !hasText(lead?.email, 254) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email) ||
         !hasText(lead?.telephone, 40) || !/^[+\d\s().-]{6,40}$/.test(lead.telephone) ||
         lead.telephone.replace(/\D/g, "").length < 6) {

@@ -246,8 +246,8 @@ export async function createPackagePaymentLink(
 
 export async function fetchPaymentRecord(
   paymentId: string
-): Promise<PackagePaymentLinkResponse> {
-  return bookingBackend<PackagePaymentLinkResponse>(`/packages/payments/${encodeURIComponent(paymentId)}`, undefined, {}, "GET");
+): Promise<Pick<PackagePaymentLinkResponse, "status">> {
+  return bookingBackend(`/packages/payments/${encodeURIComponent(paymentId)}`, undefined, {}, "GET");
 }
 
 export async function submitPaymentCallback(

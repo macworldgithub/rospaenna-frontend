@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
-import { PendingBooking } from "@/types/teesheet";
+import { COURSES, type PendingBooking } from "@/types/teesheet";
 import { getItineraryPdfUrl } from "@/lib/communicationsClient";
 
 const inputClass = "w-full bg-[#111111] border border-[#DBB155]/20 text-white p-2.5 rounded-sm outline-none focus:ring-1 focus:ring-[#DBB155] placeholder-gray-600 text-sm";
@@ -159,6 +159,10 @@ function BookingForm() {
   const searchParams = useSearchParams();
 
   const [booking, setBooking] = useState<PendingBooking | null>(null);
+  const selectedCourse = Object.keys(COURSES).find(
+    (key) => COURSES[key].id === booking?.course?.id,
+  );
+  const teeTimesHref = selectedCourse ? `/tee-times?course=${selectedCourse}` : "/tee-times";
   const players = booking?.players ?? 1;
   const price = booking ? new Intl.NumberFormat("en-IE", {
     style: "currency",
@@ -347,7 +351,15 @@ function BookingForm() {
           className="w-4 h-4 mt-0.5 border-gray-600 rounded accent-[#DBB155]"
         />
         <span className="text-[11px] text-gray-400 font-bold leading-tight">
-          I have read and I accept the <a href="#" className="text-[#DBB155] hover:underline">Privacy Policy</a> and Visitor <a href="#" className="text-[#DBB155] hover:underline">Terms and Conditions</a>
+          I have read and accept the{" "}
+          <a href="https://rosapenna.ie/privacy-statement-eu/" target="_blank" rel="noopener noreferrer" className="text-[#DBB155] underline">
+            Privacy Policy
+          </a>
+          {" "}and the visitor terms and conditions.{" "}
+          <a href="mailto:golf@rosapenna.ie?subject=Visitor%20golf%20terms" className="text-[#DBB155] underline">
+            Request the visitor terms from Golf Reservations
+          </a>
+          .
         </span>
       </label>
     </div>
@@ -390,11 +402,9 @@ function BookingForm() {
         <p className="mt-2 text-gray-400">
           Continuing checks the current BRS price and availability, then requests checkout preparation. This page does not store card numbers.
         </p>
-        {!booking && (
-          <Link href="/tee-times" className="mt-3 inline-block text-[#DBB155] underline">
-            Choose a tee time
-          </Link>
-        )}
+        <Link href={teeTimesHref} className="mt-3 inline-block text-[#DBB155] underline">
+          {booking ? "Back to tee times" : "Choose a tee time"}
+        </Link>
       </div>
 
       {/* Authoritative backend response notification */}
@@ -627,14 +637,28 @@ function BookingForm() {
                   </h3>
 
                   <div className="flex flex-col gap-1">
-                    <label className={labelClass}>Name<span className={requiredClass}>*</span></label>
+                    <label htmlFor={`player-${num}-first-name`} className={labelClass}>First Name<span className={requiredClass}>*</span></label>
                     <input
+                      id={`player-${num}-first-name`}
                       type="text"
                       className={inputClass}
                       required
                       maxLength={100}
                       value={otherPlayers[num - 2].firstName}
                       onChange={(e) => updateOtherPlayer(num - 2, "firstName", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor={`player-${num}-last-name`} className={labelClass}>Last Name<span className={requiredClass}>*</span></label>
+                    <input
+                      id={`player-${num}-last-name`}
+                      type="text"
+                      className={inputClass}
+                      required
+                      maxLength={100}
+                      value={otherPlayers[num - 2].lastName}
+                      onChange={(e) => updateOtherPlayer(num - 2, "lastName", e.target.value)}
                     />
                   </div>
 
@@ -730,7 +754,7 @@ function BookingForm() {
         {submitError && (
           <div role="alert" className="text-[#d9534f] text-sm max-w-[400px]">
             {submitError}
-            <Link href="/tee-times" className="block mt-2 text-[#DBB155] underline">
+            <Link href={teeTimesHref} className="block mt-2 text-[#DBB155] underline">
               Choose a tee time again
             </Link>
           </div>

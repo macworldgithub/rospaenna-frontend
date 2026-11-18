@@ -70,14 +70,26 @@ test("N01: book-golf page has zero placeholder '#' links", () => {
   assert.equal(matches, null, "Found placeholder href='#' in book-golf page");
 });
 
-test("N01: book-golf page references official BRS URLs and verified contact numbers", () => {
+test("Golf booking links stay on Rosapenna and retain verified contact details", () => {
   const filePath = path.join(__dirname, "../app/book-golf/page.tsx");
   const content = fs.readFileSync(filePath, "utf-8");
 
-  // Verified BRS links
-  assert.ok(content.includes("https://visitors.brsgolf.com/rosapenna#/course/1"));
-  assert.ok(content.includes("https://visitors.brsgolf.com/stpatrickslinks#/course/1"));
-  assert.ok(content.includes("https://visitors.brsgolf.com/rosapenna#/course/3"));
+  assert.ok(content.includes('/tee-times?course=${course.id}'));
+  for (const course of ["old-tom-morris", "sandy-hills", "st-patricks"]) {
+    assert.ok(content.includes(`id: "${course}"`), `Missing course: ${course}`);
+  }
+
+  const guestFacingFiles = [
+    "app/book-golf/page.tsx",
+    "app/(main)/booking/page.tsx",
+    "components/Navbar.tsx",
+    "components/booking/BookingChoiceModal.tsx",
+    "components/booking/BookingChoiceSection.tsx",
+  ];
+  for (const file of guestFacingFiles) {
+    const source = fs.readFileSync(path.join(__dirname, "..", file), "utf-8");
+    assert.doesNotMatch(source, /https?:\/\/[^/"\s]*brsgolf\.com/i, file);
+  }
 
   // Verified contact phone and email
   assert.ok(content.includes("+353 (0)74 91 55000"));

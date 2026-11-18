@@ -4,48 +4,50 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Menu, X, Phone, Mail, Calendar, Compass } from "lucide-react";
 import BookingChoiceModal from "@/components/booking/BookingChoiceModal";
+import { useManageBookingEnabled } from "@/lib/useManageBookingEnabled";
 
 const navLinks = [
-  { label: "Golf", href: "#golf" },
-  { label: "Stay", href: "#stay" },
-  { label: "Dine", href: "#dine" },
-  { label: "Experience", href: "#experience" },
-  { label: "Contact", href: "#contact" },
+  { label: "Golf", href: "/#golf" },
+  { label: "Stay", href: "/#stay" },
+  { label: "Dine", href: "/#dine" },
+  { label: "Experience", href: "/#experience" },
+  { label: "Contact", href: "/#contact" },
 ];
 
-export default function Navbar() {
+export default function Navbar({ overlay = false, showManageBooking = true } = {}) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [choiceOpen, setChoiceOpen] = useState(false);
+  const manageBookingEnabled = useManageBookingEnabled(showManageBooking);
 
   useEffect(() => {
+    if (!overlay) return;
     const handleScroll = () => setScrolled(window.scrollY > 40);
     handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [overlay]);
 
   return (
     <>
       <nav
         aria-label="Main Navigation"
-        className={`fixed top-0 left-0 w-full z-40 transition-all duration-300 ${
-          scrolled
-            ? "bg-[#050505]/95 backdrop-blur-sm shadow-[0_4px_30px_rgba(0,0,0,0.45)]"
-            : "bg-transparent"
+        className={`w-full z-40 transition-colors duration-300 ${
+          overlay ? "fixed top-0 left-0" : "relative border-b border-[#DBB155]/10"
+        } ${
+          overlay && !scrolled
+            ? "bg-transparent"
+            : "bg-[#050505]/95 backdrop-blur-sm"
         }`}
       >
         <div className="absolute inset-0 bg-linear-to-b from-black/60 to-transparent pointer-events-none" />
 
         <div className="relative max-w-350 mx-auto px-4 sm:px-6 md:px-10 py-4 sm:py-5 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false);
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className="flex flex-col leading-none shrink-0 text-left focus:outline-none"
-            aria-label="Rosapenna Hotel & Golf Resort - Back to Top"
+          <Link
+            href="/"
+            onClick={() => setOpen(false)}
+            className="flex flex-col leading-none shrink-0 text-left"
+            aria-label="Rosapenna Hotel & Golf Resort home"
           >
             <span className="text-white font-bold tracking-[0.28em] uppercase text-[14px] md:text-[15px]">
               ROSAPENNA
@@ -53,15 +55,15 @@ export default function Navbar() {
             <span className="text-[#DBB155] tracking-[0.18em] uppercase text-[8px] md:text-[10px] mt-2 font-medium">
               HOTEL &amp; GOLF RESORT
             </span>
-          </button>
+          </Link>
 
-          <div className="hidden xl:flex items-center gap-4 lg:gap-9">
+          <div className="hidden xl:flex items-center gap-4 2xl:gap-9">
             {navLinks.map((link) => (
               <Link
                 key={link.label}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="text-white/75 hover:text-[#c9a04a] tracking-[0.18em] uppercase text-[11px] font-semibold transition-colors duration-200"
+                className="text-white/75 hover:text-[#c9a04a] tracking-[0.18em] uppercase text-[11px] font-semibold transition-colors duration-200 whitespace-nowrap"
               >
                 {link.label}
               </Link>
@@ -132,16 +134,24 @@ export default function Navbar() {
                 Book Stay &amp; Play
               </Link>
 
-              <a
-                href="https://visitors.brsgolf.com/rosapenna#/course/1"
-                target="_blank"
-                rel="noopener noreferrer"
+              <Link
+                href="/book-golf"
                 onClick={() => setOpen(false)}
                 className="text-center py-3 bg-[#DBB155] text-black font-bold tracking-[0.15em] text-[11px] uppercase flex items-center justify-center gap-2"
               >
                 <Compass size={14} />
-                Book Golf Only (BRS)
-              </a>
+                Book Golf
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setChoiceOpen(true);
+                }}
+                className="border border-[#DBB155] py-3 text-xs font-bold uppercase tracking-wider text-[#DBB155]"
+              >
+                Book Options
+              </button>
 
               {/* Mobile Contact Quick Actions */}
               <div className="grid grid-cols-2 gap-2 pt-2">
@@ -168,7 +178,11 @@ export default function Navbar() {
       </nav>
 
       {/* Choice Modal */}
-      <BookingChoiceModal isOpen={choiceOpen} onClose={() => setChoiceOpen(false)} />
+      <BookingChoiceModal
+        isOpen={choiceOpen}
+        onClose={() => setChoiceOpen(false)}
+        showManageBooking={manageBookingEnabled}
+      />
     </>
   );
 }

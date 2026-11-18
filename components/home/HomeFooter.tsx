@@ -8,8 +8,6 @@ const quickLinks = [
   { label: "Accommodation", href: "#stay" },
   { label: "Dining", href: "#dine" },
   { label: "Package Builder", href: "#packages" },
-  { label: "Resort Map", href: "#" },
-  { label: "Gallery", href: "#" },
 ];
 
 const courses = [
@@ -17,8 +15,8 @@ const courses = [
   { label: "Sandy Hills Links", href: "#golf" },
   { label: "Old Tom Morris Links", href: "#golf" },
   { label: "Three Links Ticket", href: "#golf" },
-  { label: "Tee Times", href: "#" },
-  { label: "Green Fees", href: "#" },
+  { label: "Tee Times", href: "/book-golf" },
+  { label: "Green Fees", href: "https://rosapenna.ie/golf-rates/" },
 ];
 
 export default function HomeFooter() {
@@ -150,21 +148,14 @@ export default function HomeFooter() {
 
           <div className="flex flex-wrap justify-center gap-8">
             <Link
-              href="#"
+              href="https://rosapenna.ie/privacy-statement-eu/"
               className="text-[#666] hover:text-[#D4AF55] transition"
             >
               Privacy Policy
             </Link>
 
             <Link
-              href="#"
-              className="text-[#666] hover:text-[#D4AF55] transition"
-            >
-              Payment Policy
-            </Link>
-
-            <Link
-              href="#"
+              href="https://rosapenna.ie/cookie-policy-eu/"
               className="text-[#666] hover:text-[#D4AF55] transition"
             >
               Cookie Notice

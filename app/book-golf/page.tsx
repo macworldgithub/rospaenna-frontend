@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import BookingChoiceSection from "@/components/booking/BookingChoiceSection";
+import Navbar from "@/components/Navbar";
 
 const courses = [
   {
@@ -11,7 +12,6 @@ const courses = [
     logo: "/images/OTM.png",
     alt: "Old Tom Morris Links",
     available: true,
-    brsUrl: "https://visitors.brsgolf.com/rosapenna#/course/1",
   },
   {
     id: "sandy-hills",
@@ -21,7 +21,6 @@ const courses = [
     logo: "/images/sandyhills.png",
     alt: "Sandy Hills Links",
     available: true,
-    brsUrl: "https://visitors.brsgolf.com/rosapenna#/course/3",
   },
   {
     id: "st-patricks",
@@ -31,47 +30,13 @@ const courses = [
     logo: "/images/stpatricks.png",
     alt: "St. Patrick's Links",
     available: true,
-    brsUrl: "https://visitors.brsgolf.com/stpatrickslinks#/course/1",
   },
 ];
-
-function BookGolfNavbar() {
-  return (
-    <nav className="w-full py-5 px-6 md:px-12 flex items-center justify-between border-b border-[#DBB155]/10">
-      {/* Left spacer */}
-      <div className="flex-1" />
-
-      {/* Center — 18R93 logo */}
-      <div className="flex-1 flex justify-center items-center">
-        <Link href="/" className="flex items-center text-[#DBB155]" aria-label="Rosapenna Homepage">
-          <span className="text-sm font-bold mt-4 tracking-wider">18</span>
-          <span
-            className="font-serif text-6xl mx-1 italic leading-none"
-            style={{ fontFamily: "Georgia, serif" }}
-          >
-            R
-          </span>
-          <span className="text-sm font-bold mt-4 tracking-wider">93</span>
-        </Link>
-      </div>
-
-      {/* Right — Book Golf button (current page) */}
-      <div className="flex-1 flex justify-end">
-        <Link
-          href="/#packages"
-          className="hidden md:inline-block text-black bg-[#DBB155] px-5 py-2.5 text-[13px] font-bold tracking-[0.15em] uppercase hover:bg-[#c9a04a] transition-colors"
-        >
-          Stay &amp; Play
-        </Link>
-      </div>
-    </nav>
-  );
-}
 
 export default function BookGolfPage() {
   return (
     <div className="min-h-screen bg-black flex flex-col text-white">
-      <BookGolfNavbar />
+      <Navbar />
 
       <div className="max-w-[1200px] w-full mx-auto px-6 py-10 flex-grow">
 
@@ -99,7 +64,7 @@ export default function BookGolfPage() {
         <BookingChoiceSection />
 
         {/* Course Cards */}
-        <div className="mt-12">
+        <div id="courses" className="mt-12">
           <h2 className="text-2xl font-serif text-white mb-6 text-center">
             Our Championship Links
           </h2>
@@ -135,23 +100,12 @@ export default function BookGolfPage() {
                   <div className="absolute inset-0 border border-transparent group-hover:border-[#DBB155]/40 transition-colors duration-300" />
                 </Link>
 
-                {/* Direct Action Buttons for this course */}
-                <div className="mt-4 w-full flex flex-col gap-2">
-                  <Link
-                    href={`/tee-times?course=${course.id}`}
-                    className="w-full text-center text-xs py-2 bg-[#DBB155]/15 text-[#DBB155] border border-[#DBB155]/30 hover:bg-[#DBB155] hover:text-black font-semibold uppercase tracking-wider rounded-sm transition-colors"
-                  >
-                    Check Live Times
-                  </Link>
-                  <a
-                    href={course.brsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full text-center text-[11px] py-1.5 text-gray-400 hover:text-white border border-white/10 hover:border-white/30 uppercase tracking-wider rounded-sm transition-colors"
-                  >
-                    Direct BRS Link &rarr;
-                  </a>
-                </div>
+                <Link
+                  href={`/tee-times?course=${course.id}`}
+                  className="mt-4 w-full text-center text-xs py-2 bg-[#DBB155]/15 text-[#DBB155] border border-[#DBB155]/30 hover:bg-[#DBB155] hover:text-black font-semibold uppercase tracking-wider rounded-sm transition-colors"
+                >
+                  View Tee Times
+                </Link>
               </div>
             ))}
           </div>

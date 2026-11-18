@@ -70,6 +70,8 @@ const euro = (amount: number) =>
   new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(amount);
 
 const STORAGE_KEY = "rosapenna_stay_package_inputs";
+const PARTY_SIZES = [1, 2, 3, 4, 6, 8, 12, 16];
+type GuestName = { first_name: string; last_name: string };
 
 export default function BespokePackage() {
   const [currentStep, setCurrentStep] = useState(0);
@@ -80,12 +82,34 @@ export default function BespokePackage() {
 
   // Step 1: Guests & Contact
   const [groupSize, setGroupSize] = useState(2);
+  const [additionalGuests, setAdditionalGuests] = useState<GuestName[]>([
+    { first_name: "", last_name: "" },
+  ]);
   const [leadFirstName, setLeadFirstName] = useState("");
   const [leadLastName, setLeadLastName] = useState("");
   const [leadEmail, setLeadEmail] = useState("");
   const [leadPhone, setLeadPhone] = useState("");
   const [residenceCountry, setResidenceCountry] = useState("IE");
   const [hasGolfIrelandIndex, setHasGolfIrelandIndex] = useState(false);
+  const hasGuestDetails = Boolean(
+    leadFirstName.trim() && leadLastName.trim() && leadEmail.trim() && leadPhone.trim().length >= 6 &&
+    additionalGuests.length === groupSize - 1 &&
+    additionalGuests.every((guest) => guest.first_name.trim() && guest.last_name.trim())
+  );
+
+  function updatePartySize(size: number) {
+    setGroupSize(size);
+    setAdditionalGuests((guests) => Array.from(
+      { length: size - 1 },
+      (_, index) => guests[index] ?? { first_name: "", last_name: "" },
+    ));
+  }
+
+  function updateGuestName(index: number, field: keyof GuestName, value: string) {
+    setAdditionalGuests((guests) => guests.map((guest, guestIndex) =>
+      guestIndex === index ? { ...guest, [field]: value } : guest,
+    ));
+  }
 
   // Step 2: Room Configuration
   const [roomCategory, setRoomCategory] = useState("CLASSIC");
@@ -117,6 +141,7 @@ export default function BespokePackage() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<PackageSearchResponse | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [teeTimeRefresh, setTeeTimeRefresh] = useState(0);
 
   // Live Verified Quote & Terms Acceptance (Ticket N04)
   const [liveQuote, setLiveQuote] = useState<PackageQuoteResponse | null>(null);
@@ -148,7 +173,7 @@ export default function BespokePackage() {
         const data = JSON.parse(saved);
         if (data.arrivalDate) setArrivalDate(data.arrivalDate);
         if (data.nights) setNights(data.nights);
-        if (data.groupSize) setGroupSize(data.groupSize);
+        if (PARTY_SIZES.includes(data.groupSize)) updatePartySize(data.groupSize);
         if (data.leadFirstName) setLeadFirstName(data.leadFirstName);
         if (data.leadLastName) setLeadLastName(data.leadLastName);
         if (data.leadEmail) setLeadEmail(data.leadEmail);
@@ -158,7 +183,7 @@ export default function BespokePackage() {
         if (data.roomCategory) setRoomCategory(data.roomCategory);
         if (data.roomBedType) setRoomBedType(data.roomBedType);
         if (data.roomCount) setRoomCount(data.roomCount);
-        if (data.dailyGolfPlan) setDailyGolfPlan(data.dailyGolfPlan);
+        if (data.selectedGolfRounds) setDailyGolfPlan(data.selectedGolfRounds);
         if (typeof data.playOnArrival === "boolean") setPlayOnArrival(data.playOnArrival);
         if (typeof data.playOnDeparture === "boolean") setPlayOnDeparture(data.playOnDeparture);
         if (typeof data.requestCaddies === "boolean") setRequestCaddies(data.requestCaddies);
@@ -184,7 +209,7 @@ export default function BespokePackage() {
         roomCategory,
         roomBedType,
         roomCount,
-        dailyGolfPlan,
+        selectedGolfRounds: dailyGolfPlan,
         playOnArrival,
         playOnDeparture,
         requestCaddies,
@@ -243,7 +268,7 @@ export default function BespokePackage() {
   }, [arrivalDate]);
 
   // Minimum Rounds Rule (N02 & F02: 2 for 2-3 nights, 3 for 4-5 nights)
-  const minRequiredRounds = useMemo(() => {
+  const standardMinimumRounds = useMemo(() => {
     if (nights <= 3) return 2;
     if (nights <= 5) return 3;
     return 4;
@@ -252,9 +277,10 @@ export default function BespokePackage() {
   // Derived Stay Days for Day-by-Day Golf Scheduling
   const stayDates = useMemo(() => {
     if (!arrivalDate) return [];
-    const days: { index: number; date: string; formattedShort: string; isArrival: boolean; isDeparture: boolean }[] = [];
+    const days: { index: number; date: string; formattedShort: string; isArrival: boolean; isDeparture: boolean; isWeekend: boolean }[] = [];
     const [year, month, day] = arrivalDate.split("-").map(Number);
-    const count = playOnDeparture ? nights + 1 : nights;
+    const arrivalWeekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+    const count = playOnDeparture || (arrivalWeekday === 6 && nights === 2) ? nights + 1 : nights;
 
     for (let i = 0; i < count; i++) {
       const d = new Date(Date.UTC(year, month - 1, day + i));
@@ -263,6 +289,7 @@ export default function BespokePackage() {
         weekday: "short",
         month: "short",
         day: "numeric",
+        timeZone: "UTC",
       }).format(d);
 
       days.push({
@@ -271,10 +298,20 @@ export default function BespokePackage() {
         formattedShort,
         isArrival: i === 0,
         isDeparture: i === nights,
+        isWeekend: d.getUTCDay() === 6 || d.getUTCDay() === 0,
       });
     }
     return days;
   }, [arrivalDate, nights, playOnDeparture]);
+
+  const firstDay = stayDates[0];
+  const firstGolfDay = stayDates.find((day) => !day.isWeekend);
+  const requiredGolfDate = firstDay && (firstDay.isWeekend || new Date(firstDay.date).getUTCDay() === 5)
+    ? firstGolfDay?.date
+    : undefined;
+  const fridayArrival = firstDay && new Date(firstDay.date).getUTCDay() === 5;
+  const shortWeekendStay = (nights === 2 && requiredGolfDate) || (nights === 3 && fridayArrival);
+  const minRequiredRounds = shortWeekendStay ? 1 : standardMinimumRounds;
 
   // Helper: St Patrick's Links closure and agronomy status checker
   const getStPatricksStatusForDate = useCallback((dateStr: string) => {
@@ -350,60 +387,6 @@ export default function BespokePackage() {
     return stayDates.every((day) => !getStPatricksStatusForDate(day.date).isAvailable);
   }, [stayDates, getStPatricksStatusForDate]);
 
-  // Synchronize dailyGolfPlan with stay dates and closure states
-  useEffect(() => {
-    if (!stayDates.length) return;
-    setDailyGolfPlan((prev) => {
-      const next = { ...prev };
-      let changed = false;
-
-      stayDates.forEach((day, idx) => {
-        const existing = next[day.date];
-        const stpStatus = getCourseClosureForDate(day.date, 4);
-        const sandyStatus = getCourseClosureForDate(day.date, 3);
-        const otmStatus = getCourseClosureForDate(day.date, 1);
-
-        // If existing selection is closed on this date, fallback to an open course
-        if (existing && !existing.isRestDay && existing.courseId) {
-          const currentStatus = getCourseClosureForDate(day.date, existing.courseId);
-          if (!currentStatus.isAvailable) {
-            let fallbackCourse = 1;
-            if (existing.courseId === 4 && sandyStatus.isAvailable) fallbackCourse = 3;
-            else if (existing.courseId === 3 && otmStatus.isAvailable) fallbackCourse = 1;
-
-            next[day.date] = {
-              courseId: fallbackCourse,
-              timeSlot: existing.timeSlot || "13:30",
-              isRestDay: false,
-            };
-            changed = true;
-            return;
-          }
-        }
-
-        if (!existing) {
-          changed = true;
-          // Pick best open course based on live availability
-          const day1Course = sandyStatus.isAvailable ? 3 : 1;
-          const day2Course = stpStatus.isAvailable ? 4 : (sandyStatus.isAvailable ? 3 : 1);
-          const day3Course = 1;
-
-          if (idx === 0) {
-            next[day.date] = { courseId: day1Course, timeSlot: "13:30", isRestDay: false };
-          } else if (idx === 1) {
-            next[day.date] = { courseId: day2Course, timeSlot: "10:00", isRestDay: false };
-          } else if (idx === 2) {
-            next[day.date] = { courseId: day3Course, timeSlot: "09:30", isRestDay: false };
-          } else {
-            next[day.date] = { courseId: null, timeSlot: "", isRestDay: true };
-          }
-        }
-      });
-
-      return changed ? next : prev;
-    });
-  }, [stayDates, searchResults, getCourseClosureForDate]);
-
   // Derived counts of scheduled rounds
   const { stPatricksRounds, sandyHillsRounds, oldTomMorrisRounds } = useMemo(() => {
     let stp = 0;
@@ -412,7 +395,7 @@ export default function BespokePackage() {
 
     stayDates.forEach((day) => {
       const plan = dailyGolfPlan[day.date];
-      if (plan && !plan.isRestDay) {
+      if (!day.isWeekend && plan?.timeSlot && !plan.isRestDay) {
         if (plan.courseId === 4) stp++;
         else if (plan.courseId === 3) sandy++;
         else if (plan.courseId === 1) oldTom++;
@@ -428,12 +411,22 @@ export default function BespokePackage() {
 
   const totalRounds = stPatricksRounds + sandyHillsRounds + oldTomMorrisRounds;
   const hasEnoughRounds = totalRounds >= minRequiredRounds;
+  const canReviewGolf = hasEnoughRounds && !isSearching && !searchError &&
+    (!requiredGolfDate || Boolean(dailyGolfPlan[requiredGolfDate]?.timeSlot)) &&
+    stayDates.every((day) => {
+    const plan = dailyGolfPlan[day.date];
+    if (day.isWeekend || !plan?.courseId || plan.isRestDay) return true;
+    return searchResults?.daily_golf_options?.find(
+      (option) => option.date === day.date && option.course_id === plan.courseId && !option.is_closed,
+    )?.tee_slots.some((slot) => slot.time === plan.timeSlot && slot.available_slots >= groupSize);
+  });
   const hasValidArrival = /^\d{4}-\d{2}-\d{2}$/.test(arrivalDate) && arrivalDate >= irelandToday();
 
   // Active Day & Handlers for Day-by-Day Golf Scheduling
   const safeActiveDayIndex = Math.min(activeDayIndex, Math.max(0, stayDates.length - 1));
   const activeDay = stayDates[safeActiveDayIndex] || stayDates[0];
   const activeDayPlan = activeDay ? dailyGolfPlan[activeDay.date] : null;
+  const isActiveRestDay = activeDay?.isWeekend || activeDayPlan?.isRestDay;
 
   const handleSelectCourse = (dateStr: string, courseId: number) => {
     setDailyGolfPlan((prev) => {
@@ -442,7 +435,7 @@ export default function BespokePackage() {
         ...prev,
         [dateStr]: {
           courseId,
-          timeSlot: existing?.timeSlot || "10:00",
+          timeSlot: existing?.courseId === courseId ? existing.timeSlot : "",
           isRestDay: false,
         },
       };
@@ -531,6 +524,7 @@ export default function BespokePackage() {
     let isMounted = true;
     setIsSearching(true);
     setSearchError(null);
+    setSearchResults(null);
 
     const timer = setTimeout(async () => {
       try {
@@ -584,6 +578,7 @@ export default function BespokePackage() {
     roomBedType,
     residenceCountry,
     hasGolfIrelandIndex,
+    teeTimeRefresh,
   ]);
 
   // Pricing Calculation based on approved rules
@@ -647,14 +642,14 @@ export default function BespokePackage() {
     const roundsPayload = stayDates
       .filter((d) => {
         const plan = dailyGolfPlan[d.date];
-        return plan && !plan.isRestDay && plan.courseId;
+        return !d.isWeekend && plan && !plan.isRestDay && plan.courseId && plan.timeSlot;
       })
       .map((d) => {
         const plan = dailyGolfPlan[d.date]!;
         return {
           course_id: plan.courseId!,
           date: d.date,
-          time: plan.timeSlot || "10:00",
+          time: plan.timeSlot,
           players: groupSize,
         };
       });
@@ -725,6 +720,10 @@ export default function BespokePackage() {
 
   // Create Scoped 25% Deposit Payment Link (Ticket N05)
   const handleCreatePaymentLink = async () => {
+    if (!hasGuestDetails) {
+      setPaymentLinkError("Enter a name for every guest and contact details for the lead guest.");
+      return;
+    }
     if (!acceptedTerms) {
       setPaymentLinkError("Please accept the Terms & Conditions before generating your payment link.");
       return;
@@ -754,6 +753,7 @@ export default function BespokePackage() {
           lead_last_name: leadLastName,
           lead_email: leadEmail,
           lead_phone: leadPhone,
+          additional_guests: additionalGuests,
           residence_country: residenceCountry,
           accepted_terms: true,
           special_requests: additionalRequests || null,
@@ -780,8 +780,10 @@ export default function BespokePackage() {
     try {
       const res = await fetch(`/api/packages/payments/${encodeURIComponent(paymentId)}`);
       if (res.ok) {
-        const data: PackagePaymentLinkResponse = await res.json();
-        setPaymentLinkRecord(data);
+        const data: Pick<PackagePaymentLinkResponse, "status"> = await res.json();
+        setPaymentLinkRecord((record) => record?.payment_id === paymentId
+          ? { ...record, status: data.status }
+          : record);
       }
     } catch {
       // Ignore background refresh errors
@@ -836,9 +838,14 @@ export default function BespokePackage() {
   // Step Navigation Handlers
   const nextStep = () => {
     if (currentStep === 0 && !hasValidArrival) return;
-    if (currentStep === 1 && (!leadFirstName || !leadLastName || !leadEmail)) return;
+    if (currentStep === 1 && !hasGuestDetails) return;
     if (currentStep === 2 && !isOccupancySufficient) return;
-    if (currentStep === 3 && !hasEnoughRounds) return;
+    if (currentStep === 3) {
+      if (!canReviewGolf) return;
+      setLiveQuote(null);
+      setAcceptedTerms(false);
+    }
+    if (currentStep === 2) setTeeTimeRefresh((previous) => previous + 1);
     setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
   };
 
@@ -881,7 +888,7 @@ export default function BespokePackage() {
     });
 
     return (
-      <section className="bg-[#050505] py-20 px-4 sm:px-6 min-h-[60vh] flex items-center justify-center">
+      <section id="packages" className="bg-[#050505] py-20 px-4 sm:px-6 min-h-[60vh] flex items-center justify-center scroll-mt-24">
         <div className="max-w-2xl w-full mx-auto border border-[#DBB155]/40 bg-[#0A0A0A] p-8 sm:p-10 rounded-sm text-center">
           <div
             className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-6 ${
@@ -1092,7 +1099,7 @@ export default function BespokePackage() {
   // Truthful Confirmation Screen (Pending Payment State)
   if (bookingIntentResult) {
     return (
-      <section className="bg-[#050505] py-20 px-4 sm:px-6 min-h-[60vh] flex items-center justify-center">
+      <section id="packages" className="bg-[#050505] py-20 px-4 sm:px-6 min-h-[60vh] flex items-center justify-center scroll-mt-24">
         <div className="max-w-2xl mx-auto border border-[#DBB155]/40 bg-[#0A0A0A] p-8 sm:p-10 rounded-sm text-center">
           <div className="w-14 h-14 bg-[#DBB155]/15 rounded-full flex items-center justify-center mx-auto mb-6 text-[#DBB155]">
             <ShieldCheck size={32} />
@@ -1306,11 +1313,12 @@ export default function BespokePackage() {
                   Total Party Size (Guests)
                 </label>
                 <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-                  {[1, 2, 3, 4, 6, 8, 12, 16].map((num) => (
+                  {PARTY_SIZES.map((num) => (
                     <button
                       key={num}
                       type="button"
-                      onClick={() => setGroupSize(num)}
+                      onClick={() => updatePartySize(num)}
+                      aria-pressed={groupSize === num}
                       className={`h-11 border rounded-sm font-semibold text-sm transition-all ${
                         groupSize === num
                           ? "bg-[#D4AF55] border-[#D4AF55] text-black"
@@ -1334,7 +1342,6 @@ export default function BespokePackage() {
                   <span className="uppercase tracking-[0.2em] text-[11px] text-[#A88945] font-semibold">
                     Lead Guest Contact Details
                   </span>
-                  <span className="text-[11px] text-gray-500">Other guest names collected at check-in</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1343,6 +1350,7 @@ export default function BespokePackage() {
                     <input
                       type="text"
                       required
+                      maxLength={100}
                       placeholder="e.g. John"
                       value={leadFirstName}
                       onChange={(e) => setLeadFirstName(e.target.value)}
@@ -1354,6 +1362,7 @@ export default function BespokePackage() {
                     <input
                       type="text"
                       required
+                      maxLength={100}
                       placeholder="e.g. Campbell"
                       value={leadLastName}
                       onChange={(e) => setLeadLastName(e.target.value)}
@@ -1384,6 +1393,30 @@ export default function BespokePackage() {
                   </div>
                 </div>
               </div>
+
+              {additionalGuests.map((guest, index) => (
+                <fieldset key={index} className="border-t border-white/10 pt-4">
+                  <legend className="pr-2 text-sm font-semibold text-[#D4AF55]">Guest {index + 2}</legend>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {(["first_name", "last_name"] as const).map((field) => (
+                      <label key={field} className="block text-xs text-gray-400">
+                        {field === "first_name" ? "First Name" : "Last Name"} *
+                        <input
+                          type="text"
+                          required
+                          maxLength={100}
+                          value={guest[field]}
+                          onChange={(event) => updateGuestName(index, field, event.target.value)}
+                          className="mt-1 h-11 w-full rounded-sm border border-[#222] bg-[#111] px-3 text-sm text-white focus:border-[#D4AF55]"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
+              {!hasGuestDetails && (
+                <p className="text-xs text-gray-400">Enter a name for every guest and contact details for the lead guest.</p>
+              )}
 
               {/* Golf Ireland Eligibility (N02 Requirement: separate residence + handicap index) */}
               <div className="pt-4 border-t border-white/5 space-y-4">
@@ -1656,7 +1689,7 @@ export default function BespokePackage() {
                           </span>
                         </div>
                         <div className="text-[11px] truncate">
-                          {plan?.isRestDay ? (
+                          {(day.isWeekend || plan?.isRestDay) ? (
                             <span className="text-sky-300 flex items-center gap-1">
                               <Coffee size={11} /> Rest Day
                             </span>
@@ -1668,7 +1701,7 @@ export default function BespokePackage() {
                             <span className="text-gray-500 italic">No Selection</span>
                           )}
                         </div>
-                        {plan?.timeSlot && !plan.isRestDay && (
+                        {!day.isWeekend && plan?.timeSlot && !plan.isRestDay && (
                           <div className="text-[10px] text-gray-400 font-mono mt-0.5 flex items-center gap-1">
                             <Clock size={10} className="text-[#D4AF55]" /> {plan.timeSlot}
                           </div>
@@ -1718,6 +1751,14 @@ export default function BespokePackage() {
                   </div>
 
                   {/* Course Cards for Active Day */}
+                  <button
+                    type="button"
+                    disabled={isSearching}
+                    onClick={() => setTeeTimeRefresh((previous) => previous + 1)}
+                    className="inline-flex items-center gap-2 text-xs text-[#D4AF55] underline disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} /> {isSearching ? "Checking tee times…" : "Refresh tee times"}
+                  </button>
                   <div className="space-y-3">
                     {GOLF_COURSES.map((course) => {
                       const isSelected = activeDayPlan?.courseId === course.courseId && !activeDayPlan?.isRestDay;
@@ -1725,13 +1766,13 @@ export default function BespokePackage() {
 
                       // Check general course closure status (agronomy rest, winter closure, BRS message)
                       const closureStatus = getCourseClosureForDate(activeDay.date, course.courseId);
-                      const isDisabled = !closureStatus.isAvailable;
+                      const isDisabled = activeDay.isWeekend || !closureStatus.isAvailable;
 
                       // Live tee times from BRS for this day and course
                       const liveGolf = searchResults?.daily_golf_options?.find(
                         (g) => g.course_id === course.courseId && g.date === activeDay.date
                       );
-                      const openSlots = liveGolf?.tee_slots || [];
+                      const openSlots = liveGolf?.tee_slots.filter((slot) => slot.available_slots >= groupSize) || [];
 
                       return (
                         <div
@@ -1781,7 +1822,7 @@ export default function BespokePackage() {
                                     : "border border-white/20 text-gray-300 hover:border-[#D4AF55] hover:text-white"
                                 }`}
                               >
-                                {isDisabled ? "Unavailable on Date" : isSelected ? "✓ Course Selected" : "Select Course"}
+                                {activeDay.isWeekend ? "Weekend rest day" : isDisabled ? "Unavailable on Date" : isSelected ? "✓ Course Selected" : "Select Course"}
                               </button>
                             </div>
                           </div>
@@ -1793,7 +1834,7 @@ export default function BespokePackage() {
                                 <span className="text-[11px] uppercase tracking-wider text-[#D4AF55] font-semibold flex items-center gap-1">
                                   <Clock size={12} /> Select Tee Time Slot:
                                 </span>
-                                {activeDayPlan?.timeSlot && (
+                                {activeDayPlan?.timeSlot && openSlots.some((slot) => slot.time === activeDayPlan.timeSlot) && (
                                   <span className="text-xs text-white font-mono bg-white/10 px-2 py-0.5 rounded">
                                     Current: <strong>{activeDayPlan.timeSlot}</strong>
                                   </span>
@@ -1822,37 +1863,11 @@ export default function BespokePackage() {
                                   })}
                                 </div>
                               ) : (
-                                /* Convenient Standard Windows when advance booking beyond 30 days */
-                                <div className="space-y-2 pt-1">
-                                  <div className="flex flex-wrap gap-2">
-                                    {["08:30", "09:20", "10:10", "11:00", "13:30", "14:20", "15:00"].map((timeStr) => {
-                                      const isSlotSelected = activeDayPlan?.timeSlot === timeStr;
-                                      return (
-                                        <button
-                                          key={timeStr}
-                                          type="button"
-                                          onClick={() => handleSelectTimeSlot(activeDay.date, timeStr)}
-                                          className={`px-3 py-1.5 rounded-sm border text-xs font-mono transition-all ${
-                                            isSlotSelected
-                                              ? "bg-[#D4AF55] border-[#D4AF55] text-black font-bold"
-                                              : "border-white/10 bg-white/5 text-gray-300 hover:border-white/30"
-                                          }`}
-                                        >
-                                          {timeStr}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                                    <span>Or specify exact time:</span>
-                                    <input
-                                      type="time"
-                                      value={activeDayPlan?.timeSlot || "10:00"}
-                                      onChange={(e) => handleSelectTimeSlot(activeDay.date, e.target.value)}
-                                      className="bg-[#111] border border-white/10 px-2 py-1 text-white font-mono rounded text-xs outline-none focus:border-[#D4AF55]"
-                                    />
-                                  </div>
-                                </div>
+                                <p className="pt-1 text-xs text-gray-400" role="status">
+                                  {isSearching ? "Checking tee times…" : searchError || !liveGolf
+                                    ? "Tee times could not be checked. Refresh tee times or contact Reservations."
+                                    : liveGolf.alternative_suggestion || "No tee times available for your group."}
+                                </p>
                               )}
                             </div>
                           )}
@@ -1864,14 +1879,15 @@ export default function BespokePackage() {
                     <button
                       type="button"
                       onClick={() => handleSelectRestDay(activeDay.date)}
+                      disabled={activeDay.date === requiredGolfDate}
                       className={`w-full p-4 border rounded-sm text-left transition-all flex items-center justify-between ${
-                        activeDayPlan?.isRestDay
+                        isActiveRestDay
                           ? "border-sky-500/60 bg-sky-950/25 text-white"
                           : "border-white/10 bg-[#111] hover:border-white/20 text-gray-300"
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center ${activeDayPlan?.isRestDay ? "bg-sky-500/20 text-sky-400" : "bg-white/5 text-gray-400"}`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isActiveRestDay ? "bg-sky-500/20 text-sky-400" : "bg-white/5 text-gray-400"}`}>
                           <Coffee size={18} />
                         </div>
                         <div>
@@ -1881,7 +1897,7 @@ export default function BespokePackage() {
                           </span>
                         </div>
                       </div>
-                      {activeDayPlan?.isRestDay && (
+                      {isActiveRestDay && (
                         <span className="text-xs text-sky-400 font-semibold flex items-center gap-1">
                           <Check size={14} /> Scheduled
                         </span>
@@ -1911,6 +1927,17 @@ export default function BespokePackage() {
                   )}
                 </div>
               </div>
+
+              {requiredGolfDate && !dailyGolfPlan[requiredGolfDate]?.timeSlot && (
+                <p className="text-xs text-amber-300">
+                  Choose a tee time on {firstGolfDay?.formattedShort} to continue.
+                </p>
+              )}
+              {hasEnoughRounds && !canReviewGolf && !isSearching && (
+                <p className="text-xs text-amber-300">
+                  Check each selected round. Choose an available time or mark the day as a rest day.
+                </p>
+              )}
 
               {/* Caddy Request (N02 Requirement: optional request, payable on day) */}
               <div className="pt-2 border-t border-white/5">
@@ -2010,10 +2037,13 @@ export default function BespokePackage() {
                     <div className="pt-2">
                       <button
                         type="button"
-                        onClick={() => setCurrentStep(3)}
+                        onClick={() => {
+                          setTeeTimeRefresh((previous) => previous + 1);
+                          setCurrentStep(3);
+                        }}
                         className="px-3 py-1.5 bg-[#DBB155] hover:bg-[#c9a04a] text-black font-semibold rounded text-[11px] transition-colors cursor-pointer"
                       >
-                        Adjust Golf Schedule in Step 3 &rarr;
+                        Adjust Golf Schedule in Step 4 &rarr;
                       </button>
                     </div>
                   </div>
@@ -2103,7 +2133,7 @@ export default function BespokePackage() {
                         <div>
                           <span className="text-gray-400 font-medium">Day {idx + 1} ({day.formattedShort}):</span>{" "}
                           <span className="text-white">
-                            {plan?.isRestDay
+                            {(day.isWeekend || plan?.isRestDay)
                               ? "Rest Day (No Golf)"
                               : course
                               ? course.name
@@ -2115,7 +2145,7 @@ export default function BespokePackage() {
                             </span>
                           )}
                         </div>
-                        {!plan?.isRestDay && plan?.timeSlot && (
+                        {!day.isWeekend && !plan?.isRestDay && plan?.timeSlot && (
                           <span className="text-[#D4AF55] font-mono text-[11px] bg-white/5 px-2 py-0.5 rounded">
                             {plan.timeSlot}
                           </span>
@@ -2280,9 +2310,9 @@ export default function BespokePackage() {
                 onClick={nextStep}
                 disabled={
                   (currentStep === 0 && !hasValidArrival) ||
-                  (currentStep === 1 && (!leadFirstName || !leadLastName || !leadEmail)) ||
+                  (currentStep === 1 && !hasGuestDetails) ||
                   (currentStep === 2 && !isOccupancySufficient) ||
-                  (currentStep === 3 && !hasEnoughRounds)
+                  (currentStep === 3 && !canReviewGolf)
                 }
                 className="w-full sm:w-auto px-8 py-3 bg-[#D4AF55] hover:bg-[#c9a04a] disabled:bg-white/10 disabled:text-gray-600 text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
@@ -2296,6 +2326,7 @@ export default function BespokePackage() {
                   Boolean(
                     isCreatingPaymentLink ||
                     isLoadingQuote ||
+                    !hasGuestDetails ||
                     !acceptedTerms ||
                     (quoteRemainingSeconds <= 0 && !liveQuote) ||
                     (liveQuote && liveQuote.status !== "available")

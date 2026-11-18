@@ -671,6 +671,7 @@ export interface OccupantRosterResponse {
   room_quantity: number;
   room_groups: BookedRoomGroupSummary[];
   occupants: OccupantDetail[];
+  unassigned_guests?: Pick<OccupantDetail, "first_name" | "last_name">[];
   sharing_preferences: SharingPreference[];
   unassigned_physical_room_notice: string;
   version_hash: string;

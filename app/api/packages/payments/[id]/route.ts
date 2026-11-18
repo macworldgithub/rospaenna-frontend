@@ -11,8 +11,8 @@ export async function GET(
   }
 
   try {
-    const data = await bookingBackend(`/packages/payments/${encodeURIComponent(id)}`, undefined, {}, "GET");
-    return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
+    const data = await bookingBackend<{ status: string }>(`/packages/payments/${encodeURIComponent(id)}`, undefined, {}, "GET");
+    return NextResponse.json({ status: data.status }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     const { error, status } = bookingError(err);
     return NextResponse.json({ error }, { status });

@@ -15,7 +15,7 @@ export default function BookingChoiceSection() {
             Choose Your Booking Experience
           </h2>
           <p className="text-sm text-gray-400 mt-2 max-w-xl mx-auto">
-            Book Stay &amp; Play packages online, reserve day visitor tee times directly on BRS Golf, or contact Reservations for bespoke itineraries.
+            Build a Stay &amp; Play package, choose a course for visitor golf, or contact Reservations for a group trip.
           </p>
         </div>
 
@@ -43,7 +43,7 @@ export default function BookingChoiceSection() {
             </div>
           </div>
 
-          {/* Card 2: Golf Only (BRS) */}
+          {/* Card 2: Golf Only */}
           <div className="bg-[#0f0f0f] border border-white/10 hover:border-[#DBB155] p-6 rounded-sm flex flex-col justify-between transition-colors">
             <div>
               <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center text-gray-300 mb-4">
@@ -53,17 +53,15 @@ export default function BookingChoiceSection() {
                 Visitor Golf Only
               </h3>
               <p className="text-xs text-gray-400 leading-relaxed">
-                Playing as a day visitor without hotel accommodation? Reserve public tee times directly on our official BRS Golf portal.
+                Playing as a day visitor? Choose a course to see its tee times.
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-white/5">
               <a
-                href="https://visitors.brsgolf.com/rosapenna#/course/1"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="#courses"
                 className="inline-block w-full text-center bg-transparent border border-[#DBB155] text-[#DBB155] hover:bg-[#DBB155] hover:text-black font-bold uppercase tracking-wider text-xs py-3 rounded-sm transition-all"
               >
-                Open BRS Golf Portal &rarr;
+                Choose a course &rarr;
               </a>
             </div>
           </div>

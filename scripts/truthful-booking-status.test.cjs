@@ -107,3 +107,34 @@ test('GET /api/booking-intents/[id] forwards 404 when booking is not found', asy
   const data = await res.json();
   assert.equal(data.error, 'Booking record was not found');
 });
+
+test('payment status forwards only payment and booking states', async () => {
+  const paymentStatusRoute = require('../app/api/packages/payments/[id]/route.ts');
+  global.fetch = async (url, options) => {
+    assert.equal(String(url), 'http://127.0.0.1:4040/packages/payments/pay_fixture');
+    assert.equal(options.cache, 'no-store');
+    return Response.json({
+      status: 'verified_paid',
+      booking_status: 'needs_review',
+      guest_email: 'guest@example.invalid',
+      vendor_reference: 'private-fixture',
+    });
+  };
+
+  const req = new Request('http://localhost:3000/api/packages/payments/pay_fixture');
+  const response = await paymentStatusRoute.GET(req, { params: Promise.resolve({ id: 'pay_fixture' }) });
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await response.json(), {
+    status: 'verified_paid',
+    booking_status: 'needs_review',
+  });
+});
+
+test('payment status rejects an invalid reference before contacting the backend', async () => {
+  const paymentStatusRoute = require('../app/api/packages/payments/[id]/route.ts');
+  global.fetch = async () => assert.fail('No backend request expected');
+  const req = new Request('http://localhost:3000/api/packages/payments/invalid');
+  const response = await paymentStatusRoute.GET(req, { params: Promise.resolve({ id: '../invalid' }) });
+  assert.equal(response.status, 400);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+});

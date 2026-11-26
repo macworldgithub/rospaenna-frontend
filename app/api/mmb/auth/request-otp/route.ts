@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!last_name || typeof last_name !== "string" || last_name.trim().length < 1) {
+    if (last_name !== undefined && (typeof last_name !== "string" || last_name.trim().length < 1)) {
       return NextResponse.json(
         { error: "Please enter the lead guest surname." },
         { status: 400, headers: { "Cache-Control": "no-store" } }
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       "/mmb/auth/request-otp",
       {
         booking_reference: booking_reference.trim().toUpperCase(),
-        last_name: last_name.trim(),
+        ...(last_name === undefined ? {} : { last_name: last_name.trim() }),
       },
       {},
       "POST"

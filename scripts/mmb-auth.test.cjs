@@ -13,7 +13,7 @@ test("M03 Booking Lookup and One-Time Security Code (OTP) - Frontend Verificatio
     assert.ok(content.includes("no-store"), "Must set Cache-Control: no-store");
     assert.ok(content.includes("force-dynamic"), "Must enforce dynamic evaluation");
     assert.ok(content.includes("booking_reference"), "Must validate booking reference");
-    assert.ok(content.includes("last_name"), "Must validate last name");
+    assert.ok(content.includes("last_name !== undefined"), "Older clients may send a surname, but it must be optional");
   });
 
   await t.test("Verify OTP route exists, enforces 6-digit numeric pattern, and returns session", () => {

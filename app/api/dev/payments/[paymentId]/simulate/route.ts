@@ -16,8 +16,10 @@ export async function POST(
   context: { params: Promise<{ paymentId: string }> }
 ) {
   // Only the explicit application development and test profiles may simulate.
-  const env = process.env.BOOKING_ENVIRONMENT || process.env.NODE_ENV;
-  if (env !== "development" && env !== "test") {
+  const testOrigin = process.env.BOOKING_DEV_TEST_ORIGIN;
+  if (process.env.NODE_ENV !== "development" ||
+      process.env.BOOKING_ENVIRONMENT !== "development" || !testOrigin ||
+      !/^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.BOOKING_BACKEND_URL ?? "")) {
     return NextResponse.json(
       { error: "Simulation endpoints are disabled in production." },
       { status: 404 }
@@ -36,13 +38,7 @@ export async function POST(
   try {
     const originUrl = new URL(origin);
     const hostUrl = new URL(`http://${host}`);
-    const loopback = new Set(["localhost", "127.0.0.1", "::1"]);
-    const sameHost = originUrl.host === hostUrl.host;
-    const bothLoopback =
-      loopback.has(originUrl.hostname) &&
-      loopback.has(hostUrl.hostname) &&
-      originUrl.port === hostUrl.port;
-    if (!sameHost && !bothLoopback) {
+    if (originUrl.origin !== testOrigin || hostUrl.origin !== testOrigin) {
       return NextResponse.json(
         { error: "Forbidden: Origin does not match Host." },
         { status: 403 }

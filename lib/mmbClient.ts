@@ -80,15 +80,13 @@ export interface MmbBookingSummary {
 }
 
 export async function requestOtp(
-  booking_reference: string,
-  last_name: string
+  booking_reference: string
 ): Promise<RequestOtpResponse> {
   const res = await fetch("/api/mmb/auth/request-otp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       booking_reference: booking_reference.trim().toUpperCase(),
-      last_name: last_name.trim(),
     }),
   });
 

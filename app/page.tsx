@@ -13,6 +13,8 @@ import AmenitiesSection from "@/components/home/AmenitiesSection";
 import ChatWidget from "@/components/ChatWidget";
 import ManageBookingSection from "@/components/home/ManageBookingSection";
 
+export const dynamic = "force-dynamic";
+
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
@@ -25,7 +27,7 @@ export default function HomePage() {
       <GolfHeritage />
       <LuxuryAccommodation />
       <AccommodationCards />
-      <BespokePackage />
+      <BespokePackage simulationMode={process.env.NODE_ENV === "development" && Boolean(process.env.BOOKING_DEV_TEST_ORIGIN)} />
       <CompleteExperience />
       <AmenitiesSection />
       <HomeFooter />

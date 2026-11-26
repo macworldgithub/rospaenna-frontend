@@ -29,6 +29,7 @@ import type {
   PackageSearchResponse,
   PackageQuoteResponse,
   PackagePaymentLinkResponse,
+  PackagePaymentStatus,
 } from "@/lib/packagesClient";
 
 const steps = [
@@ -73,7 +74,7 @@ const STORAGE_KEY = "rosapenna_stay_package_inputs";
 const PARTY_SIZES = [1, 2, 3, 4, 6, 8, 12, 16];
 type GuestName = { first_name: string; last_name: string };
 
-export default function BespokePackage() {
+export default function BespokePackage({ simulationMode = false }: { simulationMode?: boolean }) {
   const [currentStep, setCurrentStep] = useState(0);
 
   // Step 0: Stay Dates
@@ -153,17 +154,11 @@ export default function BespokePackage() {
 
   // Scoped 25% Deposit Payment Link & Lifecycle (Ticket N05)
   const [paymentLinkRecord, setPaymentLinkRecord] = useState<PackagePaymentLinkResponse | null>(null);
+  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(false);
   const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
   const [paymentLinkError, setPaymentLinkError] = useState<string | null>(null);
-  const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
-  const [simulationSuccess, setSimulationSuccess] = useState<string | null>(null);
-  const [bookingCommitDetails, setBookingCommitDetails] = useState<{
-    status: string;
-    stage: string;
-    operaResId?: string;
-    operaConfNum?: string;
-    brsRoundIds?: string[];
-  } | null>(null);
+  const [simulating, setSimulating] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   // Restore inputs from sessionStorage on mount
   useEffect(() => {
@@ -742,6 +737,7 @@ export default function BespokePackage() {
     }
     setIsCreatingPaymentLink(true);
     setPaymentLinkError(null);
+    setTestResult(null);
 
     try {
       const res = await fetch("/api/packages/payment-link", {
@@ -766,6 +762,12 @@ export default function BespokePackage() {
       }
 
       const data: PackagePaymentLinkResponse = await res.json();
+      if (data.evidence_source === "simulation" && (!simulationMode || !data.is_test)) {
+        throw new Error("Prommt checkout is unavailable in this environment.");
+      }
+      if (simulationMode && data.evidence_source !== "simulation") {
+        throw new Error("The test checkout must use the local payment simulator.");
+      }
       setPaymentLinkRecord(data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to generate payment link.";
@@ -775,63 +777,49 @@ export default function BespokePackage() {
     }
   };
 
-  // Refresh payment status from backend
-  const handleRefreshPaymentStatus = async (paymentId: string) => {
+  const simulateTestDeposit = async () => {
+    if (!simulationMode || !paymentLinkRecord?.is_test || paymentLinkRecord.evidence_source !== "simulation") return;
+    setSimulating(true);
+    setPaymentLinkError(null);
     try {
-      const res = await fetch(`/api/packages/payments/${encodeURIComponent(paymentId)}`);
-      if (res.ok) {
-        const data: Pick<PackagePaymentLinkResponse, "status"> = await res.json();
-        setPaymentLinkRecord((record) => record?.payment_id === paymentId
-          ? { ...record, status: data.status }
-          : record);
+      const response = await fetch(`/api/dev/payments/${encodeURIComponent(paymentLinkRecord.payment_id)}/simulate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scenario: "success" }),
+      });
+      const outcome = await response.json();
+      if (!response.ok || outcome.payment_status !== "verified_paid") {
+        throw new Error(outcome.error || "The test deposit could not be verified.");
       }
-    } catch {
-      // Ignore background refresh errors
+      const confirmed = outcome.commit_result?.status === "confirmed" && outcome.commit_result.readback_verified === true;
+      setPaymentLinkRecord((record) => record?.payment_id === paymentLinkRecord.payment_id
+        ? { ...record, status: "verified_paid" }
+        : record);
+      setTestResult(confirmed
+        ? `Test booking confirmed. Booking reference: ${paymentLinkRecord.booking_reference}.`
+        : "Simulated deposit received. The test booking did not confirm. Check the backend log.");
+    } catch (error) {
+      setPaymentLinkError(error instanceof Error ? error.message : "The test could not finish.");
+    } finally {
+      setSimulating(false);
     }
   };
 
-  // Sandbox simulation of verified guest payment and booking creation (Ticket N06)
-  const handleSimulateSandboxPayment = async () => {
-    if (!paymentLinkRecord) return;
-    setIsSimulatingPayment(true);
-    setSimulationSuccess(null);
+  // Refresh payment status from backend
+  const handleRefreshPaymentStatus = async (paymentId: string) => {
+    setCheckingPaymentStatus(true);
     setPaymentLinkError(null);
-
     try {
-      const res = await fetch(`/api/dev/payments/${encodeURIComponent(paymentLinkRecord.payment_id)}/simulate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          scenario: "success",
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Sandbox payment simulation failed.");
-      }
-
-      const simData = await res.json();
-      await handleRefreshPaymentStatus(paymentLinkRecord.payment_id);
-
-      if (simData.commit_result) {
-        const cr = simData.commit_result;
-        setBookingCommitDetails({
-          status: cr.status || "unconfirmed_reconciliation",
-          stage: cr.stage || "unconfirmed_reconciliation",
-          operaResId: cr.readback_evidence?.opera_reservation_id,
-          operaConfNum: cr.readback_evidence?.opera_confirmation_number,
-          brsRoundIds: cr.readback_evidence?.brs_round_ids,
-        });
-        setSimulationSuccess("Test payment received. The booking needs staff review.");
-      } else {
-        setSimulationSuccess("Test payment received. We are creating your test booking.");
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Payment simulation failed.";
-      setPaymentLinkError(message);
+      const res = await fetch(`/api/packages/payments/${encodeURIComponent(paymentId)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Payment status is unavailable.");
+      const data: PackagePaymentStatus = await res.json();
+      setPaymentLinkRecord((record) => record?.payment_id === paymentId
+        ? { ...record, status: data.status, booking_status: data.booking_status }
+        : record);
+    } catch {
+      setPaymentLinkError("Could not check payment and booking status. Please try again.");
     } finally {
-      setIsSimulatingPayment(false);
+      setCheckingPaymentStatus(false);
     }
   };
 
@@ -877,7 +865,20 @@ export default function BespokePackage() {
 
   // Ticket N05: Live Deposit Payment & Lifecycle Screen
   if (paymentLinkRecord) {
+    const isSimulation = simulationMode && paymentLinkRecord.is_test && paymentLinkRecord.evidence_source === "simulation";
     const isPaid = paymentLinkRecord.status === "verified_paid";
+    const bookingConfirmed = isPaid && paymentLinkRecord.booking_status === "confirmed";
+    const bookingNeedsReview = paymentLinkRecord.booking_status === "needs_review";
+    const bookingTitle = bookingConfirmed
+      ? (paymentLinkRecord.is_test ? "Test booking confirmed" : "Booking confirmed")
+      : bookingNeedsReview ? "Booking needs review" : "Booking confirmation pending";
+    const bookingMessage = bookingConfirmed
+      ? (paymentLinkRecord.is_test
+        ? "The test payment, room and tee times were verified."
+        : "Payment was verified. Your room and tee times are confirmed.")
+      : bookingNeedsReview
+        ? "Payment was verified. Staff need to check your booking."
+        : "Payment was verified. Check this page again for your booking result.";
     const isExpired = paymentLinkRecord.status === "expired";
     const expiryFormatted = new Date(paymentLinkRecord.expires_at).toLocaleString("en-IE", {
       dateStyle: "medium",
@@ -902,10 +903,10 @@ export default function BespokePackage() {
             {isPaid ? <CheckCircle2 size={32} /> : isExpired ? <XCircle size={32} /> : <CreditCard size={30} />}
           </div>
 
-          {(paymentLinkRecord.evidence_source === "simulation" || paymentLinkRecord.is_test) && (
+          {paymentLinkRecord.is_test && (
             <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/40 rounded text-[11px] font-mono text-amber-300">
               <ShieldCheck size={14} className="text-amber-400" />
-              <span>TEST SIMULATION - NO REAL PAYMENT OR BOOKING</span>
+              <span>{isSimulation ? "SIMULATION — NO REAL PAYMENT OR BOOKING" : "TEST PAYMENT"}</span>
             </div>
           )}
 
@@ -914,14 +915,15 @@ export default function BespokePackage() {
               isPaid ? "text-emerald-400" : isExpired ? "text-red-400" : "text-[#DBB155]"
             }`}
           >
-            {isPaid ? "Payment Received" : isExpired ? "Payment Link Expired" : "Deposit Payment Link Created"}
+            {isSimulation ? (isPaid ? "Simulated Deposit Received" : "Ready to Simulate") :
+              isPaid ? "Payment Received" : isExpired ? "Payment Link Expired" : "Deposit Payment Link Created"}
           </p>
           <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white mb-2">
-            {isPaid ? "Booking Needs Review" : "Stay & Play Deposit Payment"}
+            {isSimulation ? "Stay & Play Booking Test" : isPaid ? bookingTitle : "Stay & Play Deposit Payment"}
           </h2>
           <p className="text-xs text-gray-400 mb-6">
-            {isPaid
-              ? "Payment was received. Your booking is not yet confirmed and needs staff review."
+            {isSimulation ? "Use the test deposit to check booking creation without sending money." : isPaid
+              ? bookingMessage
               : "Review your payment link details below to complete your 25% non-refundable deposit."}
           </p>
 
@@ -931,18 +933,6 @@ export default function BespokePackage() {
               <span className="text-gray-400">Booking Reference:</span>
               <span className="font-mono text-[#DBB155] font-bold text-base">{paymentLinkRecord.booking_reference}</span>
             </div>
-            {bookingCommitDetails?.operaConfNum && (
-              <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
-                <span className="text-gray-400">Opera Confirmation #:</span>
-                <span className="font-mono text-emerald-400 font-bold text-sm">{bookingCommitDetails.operaConfNum}</span>
-              </div>
-            )}
-            {bookingCommitDetails?.brsRoundIds && bookingCommitDetails.brsRoundIds.length > 0 && (
-              <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
-                <span className="text-gray-400">BRS Golf Rounds:</span>
-                <span className="font-mono text-emerald-400 text-xs">{bookingCommitDetails.brsRoundIds.join(", ")}</span>
-              </div>
-            )}
             <div className="flex justify-between items-center text-sm border-b border-white/5 pb-2">
               <span className="text-gray-400">Payment ID:</span>
               <span className="font-mono text-gray-300 text-xs">{paymentLinkRecord.payment_id}</span>
@@ -986,7 +976,7 @@ export default function BespokePackage() {
           </div>
 
           {/* Ticket N05 Lifecycle Tracking Box */}
-          {!isPaid && !isExpired && (
+          {!isSimulation && !isPaid && !isExpired && (
             <div className="border border-[#DBB155]/20 bg-[#16130B] p-4 rounded-sm text-left text-xs leading-relaxed space-y-2 mb-6">
               <div className="flex items-center gap-2 font-semibold text-[#DBB155]">
                 <Clock size={15} /> Payment Link Lifecycle &amp; Policies
@@ -1010,24 +1000,10 @@ export default function BespokePackage() {
             </div>
           )}
 
-          {isPaid && (
-            <div className="border border-emerald-800/40 bg-emerald-950/20 p-4 rounded-sm text-left text-xs leading-relaxed text-emerald-200 mb-6 space-y-2">
-              <div className="flex items-center gap-2 font-semibold text-emerald-300">
-                <AlertTriangle size={16} /> Booking Needs Review
-              </div>
-              <p>
-                Payment was received. Staff must check the hotel and golf booking before it can be confirmed.
-              </p>
-              <p className="text-[11px] text-emerald-300/80">
-                The remaining 75% balance of <strong>€{liveQuote?.balance_amount || pricing.balance}</strong> will be requested 6 weeks prior to your arrival date ({liveQuote?.balance_due_date || balanceDueDate}).
-              </p>
-            </div>
-          )}
-
-          {simulationSuccess && (
-            <div className="mb-4 p-3 bg-emerald-950/50 border border-emerald-600/50 rounded text-xs text-emerald-300 flex items-center gap-2">
-              <CheckCircle2 size={15} /> {simulationSuccess}
-            </div>
+          {!isSimulation && bookingConfirmed && (
+            <p className="text-xs text-emerald-300 mb-6">
+              The remaining 75% balance of <strong>€{liveQuote?.balance_amount || pricing.balance}</strong> will be requested 6 weeks prior to your arrival date ({liveQuote?.balance_due_date || balanceDueDate}).
+            </p>
           )}
 
           {paymentLinkError && (
@@ -1038,53 +1014,39 @@ export default function BespokePackage() {
 
           {/* Action Buttons */}
           <div className="space-y-3 pt-2">
-            {!isPaid && !isExpired && (
-              <>
-                <a
-                  href={paymentLinkRecord.payment_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-[#DBB155] hover:bg-[#c9a04a] text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-all shadow-md cursor-pointer"
-                >
-                  Open Prommt Payment Page (€{paymentLinkRecord.amount}) <ExternalLink size={15} />
-                </a>
-
-                <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleRefreshPaymentStatus(paymentLinkRecord.payment_id)}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-200 text-xs font-semibold rounded-sm border border-white/10 transition-colors"
-                  >
-                    <RefreshCw size={14} /> Check Payment Status
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleSimulateSandboxPayment}
-                    disabled={isSimulatingPayment}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-950/40 hover:bg-amber-900/50 text-[#DBB155] text-xs font-semibold rounded-sm border border-[#DBB155]/40 transition-colors disabled:opacity-50"
-                  >
-                    {isSimulatingPayment ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" /> Verifying...
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard size={14} /> Simulate Deposit Payment (Sandbox)
-                      </>
-                    )}
-                  </button>
-                </div>
-              </>
+            {isSimulation && (
+              testResult ? <p role="status" className="text-amber-200">{testResult}</p> :
+                <button type="button" onClick={simulateTestDeposit} disabled={simulating}
+                  className="w-full rounded bg-[#DBB155] px-6 py-3 font-semibold text-black disabled:opacity-50">
+                  {simulating ? "Simulating deposit and creating test booking…" : "Simulate deposit and create test booking"}
+                </button>
+            )}
+            {!isSimulation && !isPaid && !isExpired && (
+              <a
+                href={paymentLinkRecord.payment_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-[#DBB155] hover:bg-[#c9a04a] text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-colors"
+              >
+                Open Prommt Payment Page (€{paymentLinkRecord.amount}) <ExternalLink size={15} />
+              </a>
+            )}
+            {!isSimulation && !isExpired && !bookingConfirmed && (
+              <button
+                type="button"
+                onClick={() => handleRefreshPaymentStatus(paymentLinkRecord.payment_id)}
+                disabled={checkingPaymentStatus}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 text-xs font-semibold rounded-sm transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={14} /> {checkingPaymentStatus ? "Checking status…" : "Check payment and booking status"}
+              </button>
             )}
 
             <div className="pt-4 border-t border-white/5 flex justify-center">
               <button
                 type="button"
-                onClick={() => {
-                  setPaymentLinkRecord(null);
-                  setSimulationSuccess(null);
-                }}
+                onClick={() => setPaymentLinkRecord(null)}
+                disabled={checkingPaymentStatus}
                 className="text-xs uppercase tracking-widest text-gray-400 hover:text-white underline cursor-pointer"
               >
                 &larr; Return to Package Itinerary Review
@@ -2344,7 +2306,7 @@ export default function BespokePackage() {
                   </>
                 ) : (
                   <>
-                    Generate 25% Deposit Payment Link <ArrowRight size={16} />
+                    {simulationMode ? "Prepare simulated deposit" : "Generate 25% Deposit Payment Link"} <ArrowRight size={16} />
                   </>
                 )}
               </button>

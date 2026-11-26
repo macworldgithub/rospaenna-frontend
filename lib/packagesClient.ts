@@ -96,7 +96,12 @@ export interface PackagePaymentLinkRequest {
   special_requests?: string | null;
 }
 
-export interface PackagePaymentLinkResponse {
+export interface PackagePaymentStatus {
+  status: "draft" | "unpaid" | "pending" | "verified_paid" | "failed" | "expired" | "cancelled";
+  booking_status?: "awaiting_payment" | "pending_confirmation" | "needs_review" | "confirmed";
+}
+
+export interface PackagePaymentLinkResponse extends PackagePaymentStatus {
   payment_id: string;
   booking_intent_id: string;
   booking_reference: string;
@@ -104,7 +109,6 @@ export interface PackagePaymentLinkResponse {
   rules_version: string;
   amount: string;
   currency: string;
-  status: "draft" | "unpaid" | "pending" | "verified_paid" | "failed" | "expired" | "cancelled";
   payment_url: string;
   expires_at: string;
   reminder_at: string;
@@ -246,7 +250,7 @@ export async function createPackagePaymentLink(
 
 export async function fetchPaymentRecord(
   paymentId: string
-): Promise<Pick<PackagePaymentLinkResponse, "status">> {
+): Promise<PackagePaymentStatus> {
   return bookingBackend(`/packages/payments/${encodeURIComponent(paymentId)}`, undefined, {}, "GET");
 }
 

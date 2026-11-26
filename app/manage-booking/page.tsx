@@ -96,7 +96,6 @@ export default function ManageBookingPage() {
 
   // Guest authentication and session state
   const [bookingRef, setBookingRef] = useState("");
-  const [surname, setSurname] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpRequested, setOtpRequested] = useState(false);
   const [otpMessage, setOtpMessage] = useState<string | null>(null);
@@ -211,14 +210,10 @@ export default function ManageBookingPage() {
       setAuthError("Please enter a valid booking reference.");
       return;
     }
-    if (!surname || surname.trim().length < 1) {
-      setAuthError("Please enter the lead guest surname.");
-      return;
-    }
     setAuthError(null);
     setIsRequestingOtp(true);
     try {
-      const res = await requestOtp(bookingRef, surname);
+      const res = await requestOtp(bookingRef);
       if (res.success) {
         setOtpRequested(true);
         setOtpMessage(res.message);
@@ -1035,14 +1030,14 @@ export default function ManageBookingPage() {
                   <div className="flex items-center gap-2">
                     <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
                     <span>
-                      Authenticated guest session active for booking <b className="font-mono text-white">{bookingRef}</b> ({bookingData?.lead_guest_name || surname}).
+                      Authenticated guest session active for booking <b className="font-mono text-white">{bookingRef}</b>.
                     </span>
                   </div>
                   <span className="text-[11px] text-gray-400 font-mono">Scoped Session Active</span>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div>
                       <label htmlFor="manage-booking-reference" className="block text-gray-400 mb-1">Booking Reference</label>
                       <input
@@ -1052,17 +1047,6 @@ export default function ManageBookingPage() {
                         onChange={(e) => setBookingRef(e.target.value)}
                         placeholder="RSP-20270514-XXXXXX"
                         className="w-full bg-[#161616] border border-white/10 p-2 text-white font-mono rounded-sm outline-none focus:border-[#DBB155]"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="manage-booking-surname" className="block text-gray-400 mb-1">Lead Guest Surname</label>
-                      <input
-                        id="manage-booking-surname"
-                        type="text"
-                        value={surname}
-                        onChange={(e) => setSurname(e.target.value)}
-                        placeholder="e.g. Golfer"
-                        className="w-full bg-[#161616] border border-white/10 p-2 text-white rounded-sm outline-none focus:border-[#DBB155]"
                       />
                     </div>
                     <div className="flex items-end">

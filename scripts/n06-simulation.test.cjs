@@ -23,6 +23,8 @@ const callbackRoutePath = path.join(__dirname, '../app/api/packages/payment-call
 
 const originalFetch = global.fetch;
 const originalEnv = {
+  NODE_ENV: process.env.NODE_ENV,
+  BOOKING_DEV_TEST_ORIGIN: process.env.BOOKING_DEV_TEST_ORIGIN,
   BOOKING_ENVIRONMENT: process.env.BOOKING_ENVIRONMENT,
   BOOKING_BACKEND_URL: process.env.BOOKING_BACKEND_URL,
   BOOKING_API_KEY: process.env.BOOKING_API_KEY,
@@ -34,6 +36,8 @@ const loadRoute = (routePath) => {
 };
 
 beforeEach(() => {
+  process.env.NODE_ENV = 'development';
+  process.env.BOOKING_DEV_TEST_ORIGIN = 'http://localhost:3030';
   process.env.BOOKING_BACKEND_URL = 'http://127.0.0.1:4040';
   process.env.BOOKING_API_KEY = 'test-api-key';
   process.env.BOOKING_ENVIRONMENT = 'development';

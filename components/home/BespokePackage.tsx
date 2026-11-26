@@ -71,7 +71,8 @@ const euro = (amount: number) =>
   new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(amount);
 
 const STORAGE_KEY = "rosapenna_stay_package_inputs";
-const PARTY_SIZES = [1, 2, 3, 4, 6, 8, 12, 16];
+const CHECKOUT_STORAGE_KEY = "rosapenna_stay_package_checkout";
+const PARTY_SIZES = [1, 2, 3, 4];
 type GuestName = { first_name: string; last_name: string };
 
 export default function BespokePackage({ simulationMode = false }: { simulationMode?: boolean }) {
@@ -159,6 +160,30 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
   const [paymentLinkError, setPaymentLinkError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(CHECKOUT_STORAGE_KEY);
+      if (!saved) return;
+      const record: PackagePaymentLinkResponse = JSON.parse(saved);
+      const paymentUrl = new URL(record.payment_url);
+      if (typeof record.payment_id === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(record.payment_id)
+        && (paymentUrl.protocol === "https:" || paymentUrl.origin === window.location.origin)) {
+        setPaymentLinkRecord(record);
+      }
+    } catch {
+      // The checkout can still run when tab storage is unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!paymentLinkRecord) return;
+    try {
+      sessionStorage.setItem(CHECKOUT_STORAGE_KEY, JSON.stringify(paymentLinkRecord));
+    } catch {
+      // The current checkout remains available in memory.
+    }
+  }, [paymentLinkRecord]);
 
   // Restore inputs from sessionStorage on mount
   useEffect(() => {
@@ -806,11 +831,11 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
   };
 
   // Refresh payment status from backend
-  const handleRefreshPaymentStatus = async (paymentId: string) => {
+  const handleRefreshPaymentStatus = useCallback(async (paymentId: string) => {
     setCheckingPaymentStatus(true);
     setPaymentLinkError(null);
     try {
-      const res = await fetch(`/api/packages/payments/${encodeURIComponent(paymentId)}`, { cache: "no-store" });
+      const res = await fetch(`/api/packages/payments/${encodeURIComponent(paymentId)}`, { method: "POST", cache: "no-store" });
       if (!res.ok) throw new Error("Payment status is unavailable.");
       const data: PackagePaymentStatus = await res.json();
       setPaymentLinkRecord((record) => record?.payment_id === paymentId
@@ -821,7 +846,20 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
     } finally {
       setCheckingPaymentStatus(false);
     }
-  };
+  }, []);
+
+  const pendingPrommtTestId = paymentLinkRecord?.is_test && paymentLinkRecord.evidence_source === "prommt"
+    && paymentLinkRecord.status !== "expired"
+    && paymentLinkRecord.booking_status !== "confirmed" && paymentLinkRecord.booking_status !== "needs_review"
+    ? paymentLinkRecord.payment_id
+    : undefined;
+
+  useEffect(() => {
+    if (!pendingPrommtTestId) return;
+    const checkPayment = () => { void handleRefreshPaymentStatus(pendingPrommtTestId); };
+    window.addEventListener("focus", checkPayment);
+    return () => window.removeEventListener("focus", checkPayment);
+  }, [pendingPrommtTestId, handleRefreshPaymentStatus]);
 
   // Step Navigation Handlers
   const nextStep = () => {
@@ -1045,7 +1083,14 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
             <div className="pt-4 border-t border-white/5 flex justify-center">
               <button
                 type="button"
-                onClick={() => setPaymentLinkRecord(null)}
+                onClick={() => {
+                  try {
+                    sessionStorage.removeItem(CHECKOUT_STORAGE_KEY);
+                  } catch {
+                    // The checkout can still close when storage is unavailable.
+                  }
+                  setPaymentLinkRecord(null);
+                }}
                 disabled={checkingPaymentStatus}
                 className="text-xs uppercase tracking-widest text-gray-400 hover:text-white underline cursor-pointer"
               >
@@ -1274,7 +1319,7 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
                 <label className="block uppercase tracking-[0.2em] text-[11px] text-[#A88945] font-semibold mb-2">
                   Total Party Size (Guests)
                 </label>
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {PARTY_SIZES.map((num) => (
                     <button
                       key={num}
@@ -1291,11 +1336,6 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
                     </button>
                   ))}
                 </div>
-                {groupSize > 4 && (
-                  <p className="text-[11px] text-[#D4AF55] mt-1.5 flex items-center gap-1">
-                    <Info size={13} /> Group booking: Room quantities will be adjusted automatically in Step 2.
-                  </p>
-                )}
               </div>
 
               {/* Lead Payer / Contact Details (N02 Requirement: 1 lead payer) */}

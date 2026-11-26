@@ -62,6 +62,7 @@ export default function PreviewForm() {
           <select className={field} name="course_id">
             <option value="1">Old Tom Morris</option>
             <option value="3">Sandy Hills</option>
+            <option value="4">St Patrick&apos;s Links</option>
           </select>
         </label>
         <label className="block">Date

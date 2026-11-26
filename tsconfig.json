@@ -38,7 +38,9 @@
     ".next/booking-test/types/**/*.ts",
     ".next/booking-test/dev/types/**/*.ts",
     ".next/booking-test-3030/types/**/*.ts",
-    ".next/booking-test-3030/dev/types/**/*.ts"
+    ".next/booking-test-3030/dev/types/**/*.ts",
+    ".next/prommt-test/types/**/*.ts",
+    ".next/prommt-test/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

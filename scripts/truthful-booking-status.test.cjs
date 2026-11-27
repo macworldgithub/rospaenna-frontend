@@ -113,6 +113,7 @@ test('payment status forwards only payment and booking states', async () => {
   global.fetch = async (url, options) => {
     assert.equal(String(url), 'http://127.0.0.1:4040/packages/payments/pay_fixture');
     assert.equal(options.cache, 'no-store');
+    assert.equal(options.headers['X-Checkout-Capability'], 'B'.repeat(43));
     return Response.json({
       status: 'verified_paid',
       booking_status: 'needs_review',
@@ -121,7 +122,7 @@ test('payment status forwards only payment and booking states', async () => {
     });
   };
 
-  const req = new Request('http://localhost:3000/api/packages/payments/pay_fixture');
+  const req = new Request('http://localhost:3000/api/packages/payments/pay_fixture', { headers: { Cookie: 'rp_checkout=' + 'B'.repeat(43) } });
   const response = await paymentStatusRoute.GET(req, { params: Promise.resolve({ id: 'pay_fixture' }) });
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.deepEqual(await response.json(), {
@@ -133,8 +134,18 @@ test('payment status forwards only payment and booking states', async () => {
 test('payment status rejects an invalid reference before contacting the backend', async () => {
   const paymentStatusRoute = require('../app/api/packages/payments/[id]/route.ts');
   global.fetch = async () => assert.fail('No backend request expected');
-  const req = new Request('http://localhost:3000/api/packages/payments/invalid');
+  const req = new Request('http://localhost:3000/api/packages/payments/invalid', { headers: { Cookie: 'rp_checkout=' + 'B'.repeat(43) } });
   const response = await paymentStatusRoute.GET(req, { params: Promise.resolve({ id: '../invalid' }) });
   assert.equal(response.status, 400);
   assert.equal(response.headers.get('cache-control'), 'no-store');
+});
+
+test('payment status answers 404 without a valid checkout cookie and never contacts the backend', async () => {
+  const paymentStatusRoute = require('../app/api/packages/payments/[id]/route.ts');
+  global.fetch = async () => assert.fail('No backend request expected');
+  for (const cookie of [undefined, 'rp_checkout=short', 'other=' + 'B'.repeat(43)]) {
+    const req = new Request('http://localhost:3000/api/packages/payments/pay_fixture', cookie ? { headers: { Cookie: cookie } } : undefined);
+    const response = await paymentStatusRoute.GET(req, { params: Promise.resolve({ id: 'pay_fixture' }) });
+    assert.equal(response.status, 404);
+  }
 });

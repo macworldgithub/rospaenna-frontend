@@ -21,6 +21,7 @@ require.extensions['.ts'] = (module, file) => module._compile(compile(fs.readFil
 const simulateRoutePath = path.join(__dirname, '../app/api/dev/payments/[paymentId]/simulate/route.ts');
 const callbackRoutePath = path.join(__dirname, '../app/api/packages/payment-callback/route.ts');
 
+const CHECKOUT_COOKIE = 'rp_checkout=' + 'A'.repeat(43);
 const originalFetch = global.fetch;
 const originalEnv = {
   NODE_ENV: process.env.NODE_ENV,
@@ -56,7 +57,7 @@ test('simulation route is absent in production', async () => {
   const route = loadRoute(simulateRoutePath);
   const req = new Request('http://localhost:3030/api/dev/payments/pay_sim_1/simulate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030' },
+    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030', Cookie: CHECKOUT_COOKIE },
     body: JSON.stringify({ scenario: 'success' }),
   });
   const res = await route.POST(req, { params: Promise.resolve({ paymentId: 'pay_sim_1' }) });
@@ -70,7 +71,7 @@ test('simulation route is absent in staging', async () => {
   const route = loadRoute(simulateRoutePath);
   const req = new Request('http://localhost:3030/api/dev/payments/pay_sim_1/simulate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030' },
+    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030', Cookie: CHECKOUT_COOKIE },
     body: JSON.stringify({ scenario: 'success' }),
   });
   const res = await route.POST(req, { params: Promise.resolve({ paymentId: 'pay_sim_1' }) });
@@ -83,7 +84,7 @@ test('simulation route rejects malformed JSON before forwarding', async () => {
   const route = loadRoute(simulateRoutePath);
   const req = new Request('http://localhost:3030/api/dev/payments/pay_sim_1/simulate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030' },
+    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030', Cookie: CHECKOUT_COOKIE },
     body: '{',
   });
   const res = await route.POST(req, { params: Promise.resolve({ paymentId: 'pay_sim_1' }) });
@@ -106,7 +107,7 @@ test('simulation route rejects a scenario that is not allowlisted', async () => 
   const route = loadRoute(simulateRoutePath);
   const req = new Request('http://localhost:3030/api/dev/payments/pay_sim_1/simulate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030' },
+    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030', Cookie: CHECKOUT_COOKIE },
     body: JSON.stringify({ scenario: 'refund_everything' }),
   });
   const res = await route.POST(req, { params: Promise.resolve({ paymentId: 'pay_sim_1' }) });
@@ -135,13 +136,14 @@ test('simulation route forwards only the allowlisted facts and the server API ke
   const route = loadRoute(simulateRoutePath);
   const req = new Request('http://localhost:3030/api/dev/payments/pay_sim_1/simulate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030' },
+    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030', Cookie: CHECKOUT_COOKIE },
     body: JSON.stringify({ scenario: 'success', amount: '1.00', payment_verified: true }),
   });
   const res = await route.POST(req, { params: Promise.resolve({ paymentId: 'pay_sim_1' }) });
   assert.equal(res.status, 200);
   assert.equal(requestedUrl, 'http://127.0.0.1:4040/dev/payments/pay_sim_1/simulate');
   assert.equal(requestedHeaders['X-API-Key'], 'test-api-key');
+  assert.equal(requestedHeaders['X-Checkout-Capability'], 'A'.repeat(43));
   assert.deepEqual(JSON.parse(requestedBody), { scenario: 'success' });
   const data = await res.json();
   assert.equal(data.commit_result.status, 'confirmed');
@@ -157,7 +159,7 @@ test('payment callback rejects unsigned browser payloads', async () => {
   const route = loadRoute(callbackRoutePath);
   const req = new Request('http://localhost:3030/api/packages/payment-callback', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030' },
+    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030', Cookie: CHECKOUT_COOKIE },
     body: JSON.stringify({ payment_id: 'pay_legacy_1', status: 'paid', amount: '195.00' }),
   });
   const res = await route.POST(req);
@@ -165,4 +167,18 @@ test('payment callback rejects unsigned browser payloads', async () => {
   const data = await res.json();
   assert.match(data.error, /signature is required/i);
   assert.equal(fetched, false);
+});
+
+test('simulation route answers 404 without a checkout cookie and never contacts the backend', async () => {
+  let forwarded = false;
+  global.fetch = async () => { forwarded = true; throw new Error('unexpected request'); };
+  const route = loadRoute(simulateRoutePath);
+  const req = new Request('http://localhost:3030/api/dev/payments/pay_sim_1/simulate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Host: 'localhost:3030', Origin: 'http://localhost:3030' },
+    body: JSON.stringify({ scenario: 'success' }),
+  });
+  const res = await route.POST(req, { params: Promise.resolve({ paymentId: 'pay_sim_1' }) });
+  assert.equal(res.status, 404);
+  assert.equal(forwarded, false);
 });

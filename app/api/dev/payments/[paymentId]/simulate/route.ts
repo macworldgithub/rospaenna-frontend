@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { bookingBackend, bookingError } from "@/lib/bookingBackend";
+import { CHECKOUT_HEADER, checkoutNotFound, getCheckoutToken } from "@/lib/checkoutCapability";
 import { originFailure } from "@/lib/sameOrigin";
 
 const ALLOWED_SCENARIOS = new Set([
@@ -45,6 +46,9 @@ export async function POST(
     );
   }
 
+  const token = getCheckoutToken(req);
+  if (!token) return checkoutNotFound();
+
   const { paymentId } = await context.params;
   if (!paymentId) {
     return NextResponse.json({ error: "Payment ID is required." }, { status: 400 });
@@ -71,7 +75,7 @@ export async function POST(
     const data = await bookingBackend(
       `/dev/payments/${encodeURIComponent(paymentId)}/simulate`,
       { scenario, command_id: commandId },
-      {},
+      { [CHECKOUT_HEADER]: token },
       "POST"
     );
     return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });

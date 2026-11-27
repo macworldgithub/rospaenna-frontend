@@ -1,4 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { bookingBackend } from "@/lib/bookingBackend";
+import { CHECKOUT_HEADER } from "@/lib/checkoutCapability";
 
 export const dynamic = "force-dynamic";
 
@@ -54,21 +56,23 @@ export async function POST(request: Request) {
   arrival.setUTCDate(arrival.getUTCDate() + 7);
   while (arrival.getUTCDay() !== 1) arrival.setUTCDate(arrival.getUTCDate() + 1);
   const day = (offset: number) => new Date(arrival.getTime() + offset * 86400000).toISOString().slice(0, 10);
+  // This dev page makes a fresh checkout each run, so it uses its own one-time ownership token.
+  const owner = { [CHECKOUT_HEADER]: randomBytes(32).toString("base64url") };
   try {
     const quote = await bookingBackend<{ quote_id: string; status: string; errors: string[] }>("/packages/quote", {
       arrival_date: day(0), departure_date: day(2), rooms: [{ room_category: "CLASSIC", adults: 1 }],
       golf_rounds: [0, 1].map((offset) => ({ course_id: Number(course), date: day(offset), time: "10:00", players: 1 })),
-    });
+    }, owner);
     if (quote.status !== "available") return page(`<p>Test quote unavailable. ${escape(quote.errors.join(" "))}</p>`, 409);
     const payment = await bookingBackend<{ payment_id: string; evidence_source: string; is_test: boolean }>("/packages/payment-link", {
       quote_id: quote.quote_id, lead_first_name: "Test", lead_last_name: "Guest",
       lead_email: "booking-test@example.invalid", lead_phone: "+353000000000", accepted_terms: true,
-    });
+    }, owner);
     if (!payment.is_test || payment.evidence_source !== "simulation") throw new Error("Unexpected payment mode");
     const result = await bookingBackend<{
       payment_status: string;
       commit_result?: { status: string; operation_id: string; booking_reference: string; readback_verified: boolean; message: string };
-    }>(`/dev/payments/${encodeURIComponent(payment.payment_id)}/simulate`, { scenario: "success" });
+    }>(`/dev/payments/${encodeURIComponent(payment.payment_id)}/simulate`, { scenario: "success" }, owner);
     const commit = result.commit_result;
     if (result.payment_status !== "verified_paid" || commit?.status !== "confirmed" || !commit.readback_verified) {
       return page(`<p>Test booking did not confirm. ${escape(commit?.message ?? "Check the backend log.")}</p>`, 409);

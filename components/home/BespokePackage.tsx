@@ -73,7 +73,45 @@ const euro = (amount: number) =>
 const STORAGE_KEY = "rosapenna_stay_package_inputs";
 const CHECKOUT_STORAGE_KEY = "rosapenna_stay_package_checkout";
 const PARTY_SIZES = [1, 2, 3, 4];
+const POLL_INTERVAL_MS = 3000;
+const MAX_POLLS = 10;
 type GuestName = { first_name: string; last_name: string };
+
+// A state is final when no further backend change is expected, so polling stops.
+const isFinalPaymentState = (record: PackagePaymentLinkResponse) =>
+  record.status === "failed" || record.status === "expired" || record.status === "cancelled"
+  || record.booking_status === "confirmed" || record.booking_status === "needs_review";
+
+// Message comes only from the saved payment status, never from a simulate or redirect reply.
+const describePaymentState = (record: PackagePaymentLinkResponse, simulation: boolean) => {
+  if (record.status === "failed") {
+    return { title: "Payment failed", message: "The payment did not go through. Please try again or contact us." };
+  }
+  if (record.status === "expired") {
+    return { title: "Payment link expired", message: "This payment link has expired. Contact us for a new one." };
+  }
+  if (record.status === "verified_paid") {
+    if (record.booking_status === "confirmed") {
+      return simulation
+        ? { title: "Test booking confirmed", message: "The test payment, room and tee times were verified." }
+        : { title: "Booking confirmed", message: "Payment was verified. Your room and tee times are confirmed." };
+    }
+    if (record.booking_status === "needs_review") {
+      return {
+        title: "Booking needs review",
+        message: simulation
+          ? "Test payment received. The booking needs staff review."
+          : "Payment received. The booking needs staff review.",
+      };
+    }
+    return simulation
+      ? { title: "Test booking in progress", message: "Test payment received. We are creating your test booking." }
+      : { title: "Payment received", message: "Payment received. We are confirming your booking." };
+  }
+  return simulation
+    ? { title: "Stay & Play Booking Test", message: "Test payment is pending. Use the test deposit to check booking creation without sending money." }
+    : { title: "Stay & Play Deposit Payment", message: "Payment is pending. Complete your 25% non-refundable deposit using the payment page." };
+};
 
 export default function BespokePackage({ simulationMode = false }: { simulationMode?: boolean }) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -159,7 +197,8 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
   const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
   const [paymentLinkError, setPaymentLinkError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
+  // Bumped after a payment action to start bounded status polling.
+  const [pollStart, setPollStart] = useState(0);
 
   useEffect(() => {
     try {
@@ -170,6 +209,7 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
       if (typeof record.payment_id === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(record.payment_id)
         && (paymentUrl.protocol === "https:" || paymentUrl.origin === window.location.origin)) {
         setPaymentLinkRecord(record);
+        setPollStart((n) => n + 1);
       }
     } catch {
       // The checkout can still run when tab storage is unavailable.
@@ -762,7 +802,6 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
     }
     setIsCreatingPaymentLink(true);
     setPaymentLinkError(null);
-    setTestResult(null);
 
     try {
       const res = await fetch("/api/packages/payment-link", {
@@ -804,25 +843,22 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
 
   const simulateTestDeposit = async () => {
     if (!simulationMode || !paymentLinkRecord?.is_test || paymentLinkRecord.evidence_source !== "simulation") return;
+    const paymentId = paymentLinkRecord.payment_id;
     setSimulating(true);
     setPaymentLinkError(null);
     try {
-      const response = await fetch(`/api/dev/payments/${encodeURIComponent(paymentLinkRecord.payment_id)}/simulate`, {
+      const response = await fetch(`/api/dev/payments/${encodeURIComponent(paymentId)}/simulate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenario: "success" }),
       });
-      const outcome = await response.json();
-      if (!response.ok || outcome.payment_status !== "verified_paid") {
+      const outcome = await response.json().catch(() => ({}));
+      if (!response.ok) {
         throw new Error(outcome.error || "The test deposit could not be verified.");
       }
-      const confirmed = outcome.commit_result?.status === "confirmed" && outcome.commit_result.readback_verified === true;
-      setPaymentLinkRecord((record) => record?.payment_id === paymentLinkRecord.payment_id
-        ? { ...record, status: "verified_paid" }
-        : record);
-      setTestResult(confirmed
-        ? `Test booking confirmed. Booking reference: ${paymentLinkRecord.booking_reference}.`
-        : "Simulated deposit received. The test booking did not confirm. Check the backend log.");
+      // The simulate reply is not shown as a result. Read the saved status instead.
+      setPollStart((n) => n + 1);
+      await handleRefreshPaymentStatus(paymentId);
     } catch (error) {
       setPaymentLinkError(error instanceof Error ? error.message : "The test could not finish.");
     } finally {
@@ -860,6 +896,20 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
     window.addEventListener("focus", checkPayment);
     return () => window.removeEventListener("focus", checkPayment);
   }, [pendingPrommtTestId, handleRefreshPaymentStatus]);
+
+  // Bounded polling after a payment action: at most MAX_POLLS checks, stops on a final state.
+  const pollPaymentId = paymentLinkRecord?.payment_id;
+  const pollIsFinal = paymentLinkRecord ? isFinalPaymentState(paymentLinkRecord) : true;
+  useEffect(() => {
+    if (!pollStart || !pollPaymentId || pollIsFinal) return;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      void handleRefreshPaymentStatus(pollPaymentId);
+      if (attempts >= MAX_POLLS) clearInterval(timer);
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [pollStart, pollPaymentId, pollIsFinal, handleRefreshPaymentStatus]);
 
   // Step Navigation Handlers
   const nextStep = () => {
@@ -906,17 +956,7 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
     const isSimulation = simulationMode && paymentLinkRecord.is_test && paymentLinkRecord.evidence_source === "simulation";
     const isPaid = paymentLinkRecord.status === "verified_paid";
     const bookingConfirmed = isPaid && paymentLinkRecord.booking_status === "confirmed";
-    const bookingNeedsReview = paymentLinkRecord.booking_status === "needs_review";
-    const bookingTitle = bookingConfirmed
-      ? (paymentLinkRecord.is_test ? "Test booking confirmed" : "Booking confirmed")
-      : bookingNeedsReview ? "Booking needs review" : "Booking confirmation pending";
-    const bookingMessage = bookingConfirmed
-      ? (paymentLinkRecord.is_test
-        ? "The test payment, room and tee times were verified."
-        : "Payment was verified. Your room and tee times are confirmed.")
-      : bookingNeedsReview
-        ? "Payment was verified. Staff need to check your booking."
-        : "Payment was verified. Check this page again for your booking result.";
+    const display = describePaymentState(paymentLinkRecord, Boolean(isSimulation));
     const isExpired = paymentLinkRecord.status === "expired";
     const expiryFormatted = new Date(paymentLinkRecord.expires_at).toLocaleString("en-IE", {
       dateStyle: "medium",
@@ -957,12 +997,10 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
               isPaid ? "Payment Received" : isExpired ? "Payment Link Expired" : "Deposit Payment Link Created"}
           </p>
           <h2 className="text-2xl sm:text-3xl font-serif font-bold text-white mb-2">
-            {isSimulation ? "Stay & Play Booking Test" : isPaid ? bookingTitle : "Stay & Play Deposit Payment"}
+            {display.title}
           </h2>
           <p className="text-xs text-gray-400 mb-6">
-            {isSimulation ? "Use the test deposit to check booking creation without sending money." : isPaid
-              ? bookingMessage
-              : "Review your payment link details below to complete your 25% non-refundable deposit."}
+            {display.message}
           </p>
 
           {/* Details Card */}
@@ -1052,18 +1090,18 @@ export default function BespokePackage({ simulationMode = false }: { simulationM
 
           {/* Action Buttons */}
           <div className="space-y-3 pt-2">
-            {isSimulation && (
-              testResult ? <p role="status" className="text-amber-200">{testResult}</p> :
-                <button type="button" onClick={simulateTestDeposit} disabled={simulating}
-                  className="w-full rounded bg-[#DBB155] px-6 py-3 font-semibold text-black disabled:opacity-50">
-                  {simulating ? "Simulating deposit and creating test booking…" : "Simulate deposit and create test booking"}
-                </button>
+            {isSimulation && !isPaid && (
+              <button type="button" onClick={simulateTestDeposit} disabled={simulating}
+                className="w-full rounded bg-[#DBB155] px-6 py-3 font-semibold text-black disabled:opacity-50">
+                {simulating ? "Simulating deposit and creating test booking…" : "Simulate deposit and create test booking"}
+              </button>
             )}
             {!isSimulation && !isPaid && !isExpired && (
               <a
                 href={paymentLinkRecord.payment_url}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => setPollStart((n) => n + 1)}
                 className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-[#DBB155] hover:bg-[#c9a04a] text-black font-bold uppercase tracking-wider text-xs rounded-sm transition-colors"
               >
                 Open Prommt Payment Page (€{paymentLinkRecord.amount}) <ExternalLink size={15} />

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { bookingBackend, bookingError } from "@/lib/bookingBackend";
+import { originFailure } from "@/lib/sameOrigin";
 
 export async function GET() {
   try {
@@ -12,6 +13,10 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  if (originFailure(req)) {
+    return NextResponse.json({ error: "Request origin not allowed." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
+
   let body: unknown;
   try {
     body = await req.json();

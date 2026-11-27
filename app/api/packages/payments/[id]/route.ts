@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { bookingBackend, bookingError } from "@/lib/bookingBackend";
 import type { PackagePaymentStatus } from "@/lib/packagesClient";
+import { originFailure } from "@/lib/sameOrigin";
 
 const headers = { "Cache-Control": "no-store" };
 
@@ -29,6 +30,9 @@ export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (originFailure(req)) {
+    return NextResponse.json({ error: "Request origin not allowed." }, { status: 403, headers });
+  }
   if (process.env.BOOKING_LOCAL_PROMMT_TEST !== "1") {
     return GET(req, context);
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { bookingBackend, bookingError } from "@/lib/bookingBackend";
+import { originFailure } from "@/lib/sameOrigin";
 
 const ALLOWED_SCENARIOS = new Set([
   "success",
@@ -27,25 +28,21 @@ export async function POST(
   }
 
   // CSRF / Origin verification: same host, or an explicit loopback alias on the same port.
-  const origin = req.headers.get("origin");
-  const host = req.headers.get("host");
-  if (!origin || !host) {
+  const failure = originFailure(req, testOrigin);
+  if (failure === "missing") {
     return NextResponse.json(
       { error: "Forbidden: missing Origin or Host header." },
       { status: 403 }
     );
   }
-  try {
-    const originUrl = new URL(origin);
-    const hostUrl = new URL(`http://${host}`);
-    if (originUrl.origin !== testOrigin || hostUrl.origin !== testOrigin) {
-      return NextResponse.json(
-        { error: "Forbidden: Origin does not match Host." },
-        { status: 403 }
-      );
-    }
-  } catch {
+  if (failure === "invalid") {
     return NextResponse.json({ error: "Invalid Origin header." }, { status: 400 });
+  }
+  if (failure === "mismatch") {
+    return NextResponse.json(
+      { error: "Forbidden: Origin does not match Host." },
+      { status: 403 }
+    );
   }
 
   const { paymentId } = await context.params;
